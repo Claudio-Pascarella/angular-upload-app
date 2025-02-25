@@ -1,4 +1,4 @@
-<div>
+<div class="upload">
     <h2>Upload</h2>
     <input type="file" (change)="onFileSelected($event)" accept="image/*">
     <button (click)="onUpload()" [disabled]="!selectedFile">Carica</button>
@@ -8,8 +8,32 @@
     }
 </div>
 
-<div>
-    <h2>NAS folders</h2>
+<mat-divider></mat-divider>
 
+<div class="nas">
+    <h2>Esplora le cartelle del NAS</h2>
 
+    <!-- Percorso corrente -->
+    <p>Percorso corrente: {{ currentPath || 'NAS' }}</p>
+
+    <!-- Pulsante per tornare indietro -->
+    <button (click)="goBack()" [disabled]="!currentPath">Torna indietro</button>
+
+    <!-- Elenco delle sottocartelle -->
+    <h3>Cartelle:</h3>
+    <ul>
+        @for (folder of folders; track folder) {
+        <li>
+            <a (click)="navigateToFolder(folder.path)">{{ folder.name }}</a>
+        </li>
+        }
+    </ul>
+
+    <!-- Elenco dei file -->
+    <h3>File:</h3>
+    <ul>
+        @for (file of files; track file) {
+        <li>{{ file.name }}</li>
+        }
+    </ul>
 </div>

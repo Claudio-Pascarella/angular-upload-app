@@ -1,33 +1,54 @@
 import { Component } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { MatDividerModule } from '@angular/material/divider';
+
 
 @Component({
   selector: 'app-upload',
   standalone: true,
+  imports: [MatDividerModule],
   templateUrl: './upload.component.html',
   styleUrls: ['./upload.component.css']
 })
 export class UploadComponent {
   selectedFile: File | null = null;
   uploadMessage: string = '';
-  folders: string[] = []; // Array per memorizzare le cartelle
+  folders: { name: string; path: string }[] = [];
+  files: { name: string }[] = [];
+  currentPath: string = '';
+
 
   constructor(private http: HttpClient) { }
 
   ngOnInit() {
-    this.loadFolders(); // Carica le cartelle all'avvio del componente
+    this.loadFolderContent(); // Carica le cartelle all'avvio del componente
   }
 
   // Metodo per caricare l'elenco delle cartelle
-  loadFolders() {
-    this.http.get<any>('http://localhost:3000/folders').subscribe({
-      next: (data) => {
-        console.log('Cartelle trovate:', data.folders);
-      },
-      error: (error) => {
-        console.error('Errore durante il caricamento delle cartelle:', error);
-      }
-    });
+  loadFolderContent() {
+    this.http.get<any>(`http://localhost:3000/folders?path=${this.currentPath}`)
+      .subscribe(
+        (response) => {
+          this.folders = response.folders;
+          this.files = response.files;
+        },
+        (error) => {
+          console.error('Errore durante il caricamento del contenuto della cartella:', error);
+        }
+      );
+  }
+
+  // Metodo per navigare in una sottocartella
+  navigateToFolder(folderPath: string) {
+    this.currentPath = folderPath;
+    this.loadFolderContent();
+  }
+
+  // Metodo per tornare alla cartella precedente
+  goBack() {
+    const parentPath = this.currentPath.split('/').slice(0, -1).join('/');
+    this.currentPath = parentPath;
+    this.loadFolderContent();
   }
 
   onFileSelected(event: any) {
