@@ -14,7 +14,7 @@
     <h2>Esplora le cartelle del NAS</h2>
 
     <!-- Percorso corrente -->
-    <p>Percorso corrente: {{ currentPath || 'NAS' }}</p>
+    <p>Percorso corrente: {{ currentPath || 'Radice del NAS' }}</p>
 
     <!-- Pulsante per tornare indietro -->
     <button (click)="goBack()" [disabled]="!currentPath">Torna indietro</button>
@@ -22,8 +22,8 @@
     <!-- Elenco delle sottocartelle -->
     <h3>Cartelle:</h3>
     <ul>
-        @for (folder of folders; track folder) {
-        <li>
+        @for (folder of folders; track folder.path) {
+        <li class="list">
             <a (click)="navigateToFolder(folder.path)">{{ folder.name }}</a>
         </li>
         }
@@ -32,8 +32,11 @@
     <!-- Elenco dei file -->
     <h3>File:</h3>
     <ul>
-        @for (file of files; track file) {
-        <li>{{ file.name }}</li>
+        @for (file of files; track file.path) {
+        <li class="list">
+            {{ file.name }}
+            <button (click)="downloadFile(file.path)" class="download">Scarica</button>
+        </li>
         }
     </ul>
 </div>

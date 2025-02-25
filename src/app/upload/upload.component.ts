@@ -2,6 +2,11 @@ import { Component } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatDividerModule } from '@angular/material/divider';
 
+interface FileItem {
+  name: string;
+  type: string;
+  path: string;
+}
 
 @Component({
   selector: 'app-upload',
@@ -13,9 +18,10 @@ import { MatDividerModule } from '@angular/material/divider';
 export class UploadComponent {
   selectedFile: File | null = null;
   uploadMessage: string = '';
-  folders: { name: string; path: string }[] = [];
-  files: { name: string }[] = [];
   currentPath: string = '';
+  folders: FileItem[] = []; // Elenco delle sottocartelle
+  files: FileItem[] = []; // Elenco dei file
+
 
 
   constructor(private http: HttpClient) { }
@@ -51,6 +57,14 @@ export class UploadComponent {
     this.loadFolderContent();
   }
 
+
+  // Metodo per scaricare un file
+  downloadFile(filePath: string) {
+    const url = `http://localhost:3000/download?path=${filePath}`;
+    window.open(url, '_blank'); // Apre il file in una nuova scheda per il download
+  }
+
+  //Metodo per caricare le foto 
   onFileSelected(event: any) {
     this.selectedFile = event.target.files[0] as File;
   }
