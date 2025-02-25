@@ -10,8 +10,25 @@ import { HttpClient } from '@angular/common/http';
 export class UploadComponent {
   selectedFile: File | null = null;
   uploadMessage: string = '';
+  folders: string[] = []; // Array per memorizzare le cartelle
 
   constructor(private http: HttpClient) { }
+
+  ngOnInit() {
+    this.loadFolders(); // Carica le cartelle all'avvio del componente
+  }
+
+  // Metodo per caricare l'elenco delle cartelle
+  loadFolders() {
+    this.http.get<any>('http://localhost:3000/folders').subscribe({
+      next: (data) => {
+        console.log('Cartelle trovate:', data.folders);
+      },
+      error: (error) => {
+        console.error('Errore durante il caricamento delle cartelle:', error);
+      }
+    });
+  }
 
   onFileSelected(event: any) {
     this.selectedFile = event.target.files[0] as File;
@@ -23,17 +40,18 @@ export class UploadComponent {
     }
 
     const formData = new FormData();
-formData.append('photo', this.selectedFile);
+    formData.append('photo', this.selectedFile);
 
-this.http.post('http://localhost:3000/upload', formData).subscribe(
-  (response) => {
-    console.log('Success:', response); // Log della risposta
-    this.uploadMessage = 'File caricato con successo!';
-  },
-  (error) => {
-    console.error('Errore:', error); // Log dell'errore
-    this.uploadMessage = 'Errore durante il caricamento.';
-  }
-);
+    this.http.post('http://localhost:3000/upload', formData).subscribe(
+      (response) => {
+        console.log('Success:', response); // Log della risposta
+        this.uploadMessage = 'File caricato con successo!';
+      },
+      (error) => {
+        console.error('Errore:', error); // Log dell'errore
+        console.error('Dettagli errore:', error.error); // Log dei dettagli dell'errore
+        this.uploadMessage = 'Errore durante il caricamento.';
+      }
+    );
   }
 }

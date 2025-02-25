@@ -1,9 +1,15 @@
 <div>
-    <h2>Carica una foto</h2>
+    <h2>Upload</h2>
     <input type="file" (change)="onFileSelected($event)" accept="image/*">
     <button (click)="onUpload()" [disabled]="!selectedFile">Carica</button>
 
     @if (uploadMessage) {
     <p>{{ uploadMessage }}</p>
     }
+</div>
+
+<div>
+    <h2>NAS folders</h2>
+
+
 </div>
