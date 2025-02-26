@@ -10,33 +10,50 @@
 
 <mat-divider></mat-divider>
 
-<div class="nas">
-    <h2>Esplora le cartelle del NAS</h2>
+<div class="container">
+    <!-- Barra di navigazione -->
+    <div class="navigation">
+        <button (click)="goBack()" [disabled]="!currentPath">Torna indietro</button>
+        <span class="current-path">Percorso corrente: {{ currentPath || 'Dataset-Voli' }}</span>
+    </div>
 
-    <!-- Percorso corrente -->
-    <p>Percorso corrente: {{ currentPath || 'Radice del NAS' }}</p>
-
-    <!-- Pulsante per tornare indietro -->
-    <button (click)="goBack()" [disabled]="!currentPath">Torna indietro</button>
-
-    <!-- Elenco delle sottocartelle -->
-    <h3>Cartelle:</h3>
-    <ul>
+    <!-- Lista di cartelle -->
+    <div class="folder-list">
         @for (folder of folders; track folder.path) {
-        <li class="list">
-            <a (click)="navigateToFolder(folder.path)">{{ folder.name }}</a>
-        </li>
+        <div class="folder-item">
+            <span class="icon">📁</span>
+            <span class="name" (click)="navigateToFolder(folder.path)">
+                {{ folder.name }}
+            </span>
+            <button (click)="downloadFolder(folder.path)">Scarica cartella</button>
+        </div>
         }
-    </ul>
+    </div>
 
-    <!-- Elenco dei file -->
-    <h3>File:</h3>
-    <ul>
+    <!-- Lista di file -->
+    <div class="file-list">
         @for (file of files; track file.path) {
-        <li class="list">
-            {{ file.name }}
-            <button (click)="downloadFile(file.path)" class="download">Scarica</button>
-        </li>
+        <div class="file-item">
+            <span class="icon">📄</span>
+            <span class="name">
+                {{ file.name }}
+            </span>
+            <button (click)="downloadFile(file.path)">Scarica file</button>
+        </div>
         }
-    </ul>
+    </div>
+
+    <!-- Sezione per l'upload -->
+    <div class="upload-section">
+        <input type="file" (change)="onFileSelected($event)" #fileInput />
+        <button (click)="fileInput.click()">Scegli file</button>
+        <button (click)="onUpload()" [disabled]="!selectedFile">Carica file</button>
+    </div>
+
+    <!-- Messaggio di upload -->
+    @if (uploadMessage) {
+    <div class="upload-message">
+        {{ uploadMessage }}
+    </div>
+    }
 </div>

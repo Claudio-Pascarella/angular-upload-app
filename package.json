@@ -20,7 +20,12 @@
     "@angular/platform-browser": "^19.1.0",
     "@angular/platform-browser-dynamic": "^19.1.0",
     "@angular/router": "^19.1.0",
+    "@fortawesome/angular-fontawesome": "^1.0.0",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
+    "archiver": "^7.0.1",
+    "fs-extra": "^11.3.0",
     "rxjs": "~7.8.0",
+    "ssh2-sftp-client": "^11.0.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.15.0"
   },

@@ -22,8 +22,6 @@ export class UploadComponent {
   folders: FileItem[] = []; // Elenco delle sottocartelle
   files: FileItem[] = []; // Elenco dei file
 
-
-
   constructor(private http: HttpClient) { }
 
   ngOnInit() {
@@ -57,18 +55,12 @@ export class UploadComponent {
     this.loadFolderContent();
   }
 
-
-  // Metodo per scaricare un file
-  downloadFile(filePath: string) {
-    const url = `http://localhost:3000/download?path=${filePath}`;
-    window.open(url, '_blank'); // Apre il file in una nuova scheda per il download
-  }
-
-  //Metodo per caricare le foto 
+  // Metodo per selezionare un file
   onFileSelected(event: any) {
     this.selectedFile = event.target.files[0] as File;
   }
 
+  // Metodo per caricare un file
   onUpload() {
     if (!this.selectedFile) {
       return;
@@ -79,14 +71,40 @@ export class UploadComponent {
 
     this.http.post('http://localhost:3000/upload', formData).subscribe(
       (response) => {
-        console.log('Success:', response); // Log della risposta
+        console.log('Success:', response);
         this.uploadMessage = 'File caricato con successo!';
       },
       (error) => {
-        console.error('Errore:', error); // Log dell'errore
-        console.error('Dettagli errore:', error.error); // Log dei dettagli dell'errore
+        console.error('Errore:', error);
+        console.error('Dettagli errore:', error.error);
         this.uploadMessage = 'Errore durante il caricamento.';
       }
     );
+  }
+
+  // Metodo per scaricare un file
+  downloadFile(filePath: string) {
+    const encodedPath = encodeURIComponent(filePath);
+    const url = `http://localhost:3000/download?path=${encodedPath}`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filePath.split('/').pop() || 'file';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Metodo per scaricare una cartella come ZIP
+  downloadFolder(folderPath: string) {
+    const encodedPath = encodeURIComponent(folderPath);
+    const url = `http://localhost:3000/download-folder?path=${encodedPath}`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = folderPath.split('/').pop() + '.zip';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 }

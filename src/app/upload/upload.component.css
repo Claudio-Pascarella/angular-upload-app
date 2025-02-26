@@ -15,3 +15,94 @@
 .download {
     margin-left: 1rem;
 }
+
+.container {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.navigation {
+    margin-bottom: 20px;
+}
+
+.navigation button {
+    padding: 8px 16px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.navigation button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.current-path {
+    margin-left: 10px;
+    font-weight: bold;
+}
+
+.folder-list,
+.file-list {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 20px;
+}
+
+.folder-item,
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.folder-item:last-child,
+.file-item:last-child {
+    border-bottom: none;
+}
+
+.icon {
+    margin-right: 10px;
+}
+
+.name {
+    flex-grow: 1;
+    cursor: pointer;
+}
+
+.name:hover {
+    text-decoration: underline;
+}
+
+button {
+    padding: 8px 16px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.upload-section {
+    margin-top: 20px;
+}
+
+.upload-message {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    color: #333;
+}
