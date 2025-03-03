@@ -50,12 +50,47 @@ export class UploadComponent {
   }
 
   onFileSelected(event: any) {
-    this.selectedFiles = Array.from(event.target.files); // Converte in array
+    this.selectedFiles = Array.from(event.target.files); // Memorizza i file selezionati
   }
 
   onFolderSelected(event: any) {
-    const folderFiles = Array.from(event.target.files) as File[];
-    this.selectedFiles.push(...folderFiles);
+    this.selectedFiles = Array.from(event.target.files); // Memorizza i file della cartella selezionata
+  }
+
+  onUpload() {
+    if (!this.selectedFiles || this.selectedFiles.length === 0) {
+      this.uploadMessage = '⚠️ Nessun file selezionato!';
+      return;
+    }
+
+    const formData = new FormData();
+    this.selectedFiles.forEach((file) => {
+      formData.append('photos', file);
+    });
+
+    const headers = new HttpHeaders().set('current-path', this.currentPath);
+
+    this.http.post<{ message: string, files: string[] }>(
+      'http://localhost:3000/upload',
+      formData,
+      { headers }
+    ).subscribe({
+      next: (response) => {
+        this.uploadMessage = '✅ File/Cartelle caricati con successo!';
+        alert(this.uploadMessage);
+        console.log('File caricati:', response.files);
+        this.selectedFiles = []; // Pulisce la selezione dopo l'upload
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      },
+      error: (error) => {
+        this.uploadMessage = '❌ Errore durante il caricamento.';
+        alert(this.uploadMessage);
+        console.error(error);
+      }
+    });
   }
 
   // Metodo per tornare alla cartella precedente
@@ -63,31 +98,6 @@ export class UploadComponent {
     const parentPath = this.currentPath.split('/').slice(0, -1).join('/');
     this.currentPath = parentPath;
     this.loadFolderContent();
-  }
-
-  // Metodo per selezionare file multipli e cartelle
-  onUpload() {
-    if (!this.selectedFiles || this.selectedFiles.length === 0) {
-      return;
-    }
-
-    const formData = new FormData();
-    this.selectedFiles.forEach((file) => {
-      formData.append('photos', file, file.webkitRelativePath || file.name);
-    });
-
-    const headers = new HttpHeaders().set('current-path', this.currentPath); // ✅ Passa il percorso corrente
-
-    this.http.post('http://localhost:3000/upload', formData, { headers }).subscribe(
-      (response) => {
-        console.log('Success:', response);
-        this.uploadMessage = 'File/Cartelle caricati con successo!';
-      },
-      (error) => {
-        console.error('Errore:', error);
-        this.uploadMessage = 'Errore durante il caricamento.';
-      }
-    );
   }
 
   // Metodo per scaricare un file
