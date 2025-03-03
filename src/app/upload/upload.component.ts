@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatDividerModule } from '@angular/material/divider';
+import { HttpHeaders } from '@angular/common/http';
 
 interface FileItem {
   name: string;
@@ -16,7 +17,7 @@ interface FileItem {
   styleUrls: ['./upload.component.css']
 })
 export class UploadComponent {
-  selectedFile: File | null = null;
+  selectedFiles: File[] = [];
   uploadMessage: string = '';
   currentPath: string = '';
   folders: FileItem[] = []; // Elenco delle sottocartelle
@@ -48,6 +49,15 @@ export class UploadComponent {
     this.loadFolderContent();
   }
 
+  onFileSelected(event: any) {
+    this.selectedFiles = Array.from(event.target.files); // Converte in array
+  }
+
+  onFolderSelected(event: any) {
+    const folderFiles = Array.from(event.target.files) as File[];
+    this.selectedFiles.push(...folderFiles);
+  }
+
   // Metodo per tornare alla cartella precedente
   goBack() {
     const parentPath = this.currentPath.split('/').slice(0, -1).join('/');
@@ -55,28 +65,26 @@ export class UploadComponent {
     this.loadFolderContent();
   }
 
-  // Metodo per selezionare un file
-  onFileSelected(event: any) {
-    this.selectedFile = event.target.files[0] as File;
-  }
-
-  // Metodo per caricare un file
+  // Metodo per selezionare file multipli e cartelle
   onUpload() {
-    if (!this.selectedFile) {
+    if (!this.selectedFiles || this.selectedFiles.length === 0) {
       return;
     }
 
     const formData = new FormData();
-    formData.append('photo', this.selectedFile);
+    this.selectedFiles.forEach((file) => {
+      formData.append('photos', file, file.webkitRelativePath || file.name);
+    });
 
-    this.http.post('http://localhost:3000/upload', formData).subscribe(
+    const headers = new HttpHeaders().set('current-path', this.currentPath); // ✅ Passa il percorso corrente
+
+    this.http.post('http://localhost:3000/upload', formData, { headers }).subscribe(
       (response) => {
         console.log('Success:', response);
-        this.uploadMessage = 'File caricato con successo!';
+        this.uploadMessage = 'File/Cartelle caricati con successo!';
       },
       (error) => {
         console.error('Errore:', error);
-        console.error('Dettagli errore:', error.error);
         this.uploadMessage = 'Errore durante il caricamento.';
       }
     );
