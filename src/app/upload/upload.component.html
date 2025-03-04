@@ -1,64 +1,14 @@
 <div class="container">
-    <h2>Download</h2>
+  <h1>Dataset-voli</h1>
 
-    <!-- Barra di navigazione -->
-    <div class="navigation">
-        <button (click)="goBack()" [disabled]="!currentPath || currentPath === ''">Torna indietro</button>
-        <span class="current-path">Percorso corrente: {{ currentPath || 'Dataset-Voli' }}</span>
+  <div>
+    @for (folder of folders; track folder.name) {
+    <div>
+      <span class="icon">📁</span>
+      <span class="name" (click)="navigateToFolder(folder.path)">
+        {{ folder.name }}
+      </span>
     </div>
-
-    <!-- Lista di cartelle -->
-    <div class="folder-list">
-        @for (folder of folders; track folder.name) {
-        <div class="folder-item">
-            <span class="icon">📁</span>
-            <span class="name" (click)="navigateToFolder(folder.path)">
-                {{ folder.name }}
-            </span>
-            <button (click)="downloadFolder(folder.path)">Scarica cartella</button>
-        </div>
-        }
-    </div>
-
-    <!-- Lista di file -->
-    <div class="file-list">
-        @for (file of files; track file.name) {
-        <div class="file-item">
-            <span class="icon">📄</span>
-            <span class="name">
-                {{ file.name }}
-            </span>
-            <button (click)="downloadFile(file.path)">Scarica file</button>
-        </div>
-        }
-    </div>
-</div>
-
-<div class="container">
-    <h2>Upload</h2>
-    <span>Carica le foto nella cartella: {{ currentPath }}</span>
-
-    <div class="upload-section file-list">
-        <!-- Lista dei file/cartelle selezionati -->
-        @if (selectedFiles.length > 0) {
-        <div class="selected-files">
-            @for (file of selectedFiles; track file.name) {
-            <p>{{ file.webkitRelativePath || file.name }}</p>
-            }
-        </div>
-        }
-
-        <!-- Input per selezionare più file -->
-        <input type="file" (change)="onFileSelected($event)" #fileInput multiple hidden />
-        <button (click)="fileInput.click()" class="button-folder">Scegli file</button>
-
-        <!-- Input per selezionare cartelle -->
-        <input type="file" (change)="onFolderSelected($event)" #folderInput multiple webkitdirectory hidden />
-        <button (click)="folderInput.click()" class="button-folder">Scegli cartella</button>
-
-        <!-- Pulsante per caricare file/cartelle -->
-        <button (click)="onUpload()" [disabled]="selectedFiles.length === 0" class="button-load">
-            Carica file/cartelle
-        </button>
-    </div>
+    }
+  </div>
 </div>
