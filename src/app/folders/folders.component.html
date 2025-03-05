@@ -1,1 +1,24 @@
-<p>folders works!</p>
+<div class="folders-container">
+
+
+
+    <!-- Sezione Timestamp -->
+    <div *ngIf="takeoffTimestamps.length > 0 || landingTimestamps.length > 0">
+        <h2>Timestamp di TAKEOFF e LANDING</h2>
+
+        <!-- Timestamp di TAKEOFF -->
+        <div *ngIf="takeoffTimestamps.length > 0">
+            <h3>TAKEOFF DETECTED</h3>
+            <ul>
+                <li *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</li>
+            </ul>
+        </div>
+
+        <!-- Timestamp di LANDING -->
+        <div *ngIf="landingTimestamps.length > 0">
+            <h3>LANDING DETECTED</h3>
+            <ul>
+                <li *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</li>
+            </ul>
+        </div>
+    </div>
