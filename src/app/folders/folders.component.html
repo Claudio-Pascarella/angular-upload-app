@@ -1,24 +1,51 @@
-<div class="folders-container">
+<div class="container">
+    <h2>Log di Volo</h2>
 
-
-
-    <!-- Sezione Timestamp -->
-    <div *ngIf="takeoffTimestamps.length > 0 || landingTimestamps.length > 0">
-        <h2>Timestamp di TAKEOFF e LANDING</h2>
-
-        <!-- Timestamp di TAKEOFF -->
-        <div *ngIf="takeoffTimestamps.length > 0">
-            <h3>TAKEOFF DETECTED</h3>
-            <ul>
-                <li *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</li>
-            </ul>
-        </div>
-
-        <!-- Timestamp di LANDING -->
-        <div *ngIf="landingTimestamps.length > 0">
-            <h3>LANDING DETECTED</h3>
-            <ul>
-                <li *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</li>
-            </ul>
-        </div>
+    <!-- Sezione Takeoff -->
+    <div class="section">
+        <h3>Decollo Rilevato</h3>
+        <ul>
+            <li *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</li>
+        </ul>
+        <p *ngIf="takeoffTimestamps.length === 0">Nessun decollo rilevato.</p>
     </div>
+
+    <!-- Sezione Landing -->
+    <div class="section">
+        <h3>Atterraggio Rilevato</h3>
+        <ul>
+            <li *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</li>
+        </ul>
+        <p *ngIf="landingTimestamps.length === 0">Nessun atterraggio rilevato.</p>
+    </div>
+
+    <div class="section">
+        <h3>Dati di Volo</h3>
+
+        <!-- Visualizza la mappa con il tracciato del volo -->
+        <div *ngIf="flightPath && flightPath.length > 0">
+            <p><strong>Contenuto del file .nav (unico):</strong></p>
+            <table border="1" cellspacing="0" cellpadding="5">
+                <thead>
+                    <tr>
+                        <th>Latitudine</th>
+                        <th>Longitudine</th>
+                        <th>Altitudine (m)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let point of flightPath">
+                        <td>{{ point.lat }}</td>
+                        <td>{{ point.lon }}</td>
+                        <td>{{ point.alt }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p *ngIf="!flightPath || flightPath.length === 0">Nessun dato di volo disponibile.</p>
+
+        <!-- Area per la mappa -->
+        <div id="flightMap" style="height: 500px;"></div> <!-- La mappa verrà mostrata qui -->
+    </div>
+</div>
