@@ -1,3 +1,27 @@
 .container {
     margin: 0 2rem;
 }
+
+.map-container {
+    width: 100%;
+    /* Larghezza del contenitore */
+    height: 600px;
+    /* Altezza del contenitore */
+    margin: 20px 0;
+    /* Margine superiore e inferiore */
+    padding: 10px;
+    /* Spaziatura interna */
+    border: 1px solid #ccc;
+    /* Bordo opzionale */
+    border-radius: 8px;
+    /* Angoli arrotondati */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    /* Ombreggiatura opzionale */
+}
+
+#flightMap {
+    width: 100%;
+    /* Larghezza della mappa */
+    height: 100%;
+    /* Altezza della mappa */
+}

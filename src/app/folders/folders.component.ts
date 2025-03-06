@@ -3,11 +3,13 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
+import { LeafletModule } from '@bluehalo/ngx-leaflet';
+
 
 @Component({
   selector: 'app-folders',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, LeafletModule,],
   templateUrl: './folders.component.html',
   styleUrls: ['./folders.component.css']
 })
@@ -17,6 +19,7 @@ export class FoldersComponent implements OnInit {
   landingTimestamps: string[] = [];
   flightPath: { lat: number, lon: number, alt: number }[] = [];
   errorMessage: string = '';
+  private map!: L.Map;  // Mappa Leaflet
   private apiUrlLogArray = 'http://localhost:3000/log-array';
   private apiUrlNavData = 'http://localhost:3000/nav-data';
 
@@ -137,38 +140,47 @@ export class FoldersComponent implements OnInit {
     if (this.flightPath.length === 0) {
       console.error('❌ Nessun dato valido trovato nel file .nav');
       this.errorMessage = 'Nessun dato valido trovato nel file .nav';
+    } else {
+      // Inizializza la mappa dopo aver estratto i dati
+      this.initMap();
     }
-
-    // Dopo aver estratto i dati validi, inizializza la mappa
-    this.initializeMap();
   }
 
-  initializeMap(): void {
-    if (this.flightPath.length === 0) {
-      console.error('❌ Nessun dato per visualizzare la mappa.');
+  initMap(): void {
+    if (!this.flightPath || this.flightPath.length === 0) {
+      console.error('❌ Nessun dato disponibile per la mappa.');
       return;
     }
 
-    // Crea la mappa
-    const map = L.map('flightMap').setView([this.flightPath[0].lat, this.flightPath[0].lon], 13);
+    const firstPoint = this.flightPath[0];
 
-    // Aggiungi una tile layer (ad esempio OpenStreetMap)
+    // Inizializza la mappa
+    this.map = L.map('flightMap', {
+      center: [firstPoint.lat, firstPoint.lon],
+      zoom: 13,
+      maxZoom: 20,
+      zoomControl: true
+    });
+
+    // Aggiungi un layer di tile (OpenStreetMap)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(this.map);
 
-    // Traccia il percorso del volo come polyline
-    const latlngs: L.LatLngTuple[] = this.flightPath.map(point => [point.lat, point.lon]);  // Mappa a LatLngTuple
-    L.polyline(latlngs, { color: 'blue' }).addTo(map);
+    // Aggiungi il tracciato di volo
+    const flightCoordinates: [number, number][] = this.flightPath.map(point => [point.lat, point.lon]);
 
-    // Aggiungi un marker iniziale al primo punto del volo
-    L.marker([this.flightPath[0].lat, this.flightPath[0].lon]).addTo(map)
-      .bindPopup('Start of the flight')
-      .openPopup();
+    L.polyline(flightCoordinates, {
+      color: '#FF0000',
+      weight: 3,
+      opacity: 0.7
+    }).addTo(this.map);
 
-    // Aggiungi un marker finale all'ultimo punto del volo
-    L.marker([this.flightPath[this.flightPath.length - 1].lat, this.flightPath[this.flightPath.length - 1].lon]).addTo(map)
-      .bindPopup('End of the flight')
-      .openPopup();
+    // Aggiungi un marker per il punto di partenza
+    const startMarker = L.marker([firstPoint.lat, firstPoint.lon]).addTo(this.map);
+    startMarker.bindPopup(`<b>Partenza</b><br>Lat: ${firstPoint.lat}<br>Lon: ${firstPoint.lon}<br>Alt: ${firstPoint.alt}m`);
+
+    // Adatta la vista al tracciato di volo
+    this.map.fitBounds(flightCoordinates);
   }
 }

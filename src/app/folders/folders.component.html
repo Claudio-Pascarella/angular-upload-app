@@ -45,7 +45,9 @@
 
         <p *ngIf="!flightPath || flightPath.length === 0">Nessun dato di volo disponibile.</p>
 
-        <!-- Area per la mappa -->
-        <div id="flightMap" style="height: 500px;"></div> <!-- La mappa verrà mostrata qui -->
+        <div class="map-container">
+            <h2>Mappa del Volo</h2>
+            <div id="flightMap"></div>
+        </div>
     </div>
 </div>
