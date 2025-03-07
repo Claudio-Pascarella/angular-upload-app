@@ -19,8 +19,9 @@ export class FoldersComponent implements OnInit {
   landingTimestamps: string[] = [];
   flightPath: { lat: number, lon: number, alt: number }[] = [];
   errorMessage: string = '';
-  folderPath: string = ''; // Per contenere il parametro folderPath
-  private map!: L.Map;  // Mappa Leaflet
+  folderPath: string = '';
+  folderName: string = '';
+  private map!: L.Map;
   private apiUrlLogArray = 'http://localhost:3000/log-array';
   private apiUrlNavData = 'http://localhost:3000/nav-data';
 
@@ -30,6 +31,18 @@ export class FoldersComponent implements OnInit {
     private router: Router
   ) { }
 
+  getFolderName(): void {
+    this.http.get<any>('http://localhost:3000/get-folder-name')
+      .subscribe(
+        (response) => {
+          this.folderName = response.folderName; // Imposta il nome della cartella
+        },
+        (error) => {
+          console.error('Errore nel recupero del nome della cartella:', error);
+        }
+      );
+  }
+
   ngOnInit(): void {
     // 1. Recupera folderPath dai parametri della route
     this.route.paramMap.subscribe(params => {
@@ -37,10 +50,11 @@ export class FoldersComponent implements OnInit {
       console.log('Parametro folderPath dalla route:', this.folderPath);
     });
 
+
     // 2. Recupera folderPath dallo stato del router (se presente)
     const navigation = this.router.getCurrentNavigation();
     if (navigation?.extras.state) {
-      this.folderPath = navigation.extras.state['folderPath'] || this.folderPath; // Usa lo stato del router se presente
+      this.folderPath = navigation.extras.state['folderPath'] || this.folderPath;
       console.log('Parametro folderPath dallo stato del router:', this.folderPath);
     }
 

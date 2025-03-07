@@ -1,22 +1,40 @@
-<div class="container">
+<div class="title">
     <h2>{{ folderPath }}</h2>
+</div>
 
-    <!-- Sezione Takeoff -->
+
+<div class="container">
+    <div>
+        <!-- Sezione Takeoff -->
+        <div class="section">
+            <h3>
+                <i class="fa-solid fa-plane-departure" style="margin-right: 0.5rem;"></i>
+                Decollo:
+            </h3>
+            <p *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</p>
+            <p *ngIf="takeoffTimestamps.length === 0">Nessun decollo rilevato.</p>
+        </div>
+
+        <!-- Sezione Landing -->
+        <div class="section">
+            <h3>
+                <i class="fa-solid fa-plane-arrival" style="margin-right: 0.5rem;"></i>
+                Atterraggio:
+            </h3>
+            <p *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</p>
+            <p *ngIf="landingTimestamps.length === 0">Nessun atterraggio rilevato.</p>
+        </div>
+
+    </div>
+
+    <div class="vertical-line"></div>
+
     <div class="section">
-        <h3>Decollo:</h3>
-        <p *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</p>
-        <p *ngIf="takeoffTimestamps.length === 0">Nessun decollo rilevato.</p>
+        <h3>Trolleys: {{folderName}}</h3>
     </div>
+</div>
 
-    <!-- Sezione Landing -->
-    <div class="section">
-        <h3>Atterraggio:</h3>
-        <p *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</p>
-        <p *ngIf="landingTimestamps.length === 0">Nessun atterraggio rilevato.</p>
-    </div>
 
-    <div class="map-container">
-        <div id="flightMap"></div>
-    </div>
-
+<div class="map-container">
+    <div id="flightMap"></div>
 </div>

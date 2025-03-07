@@ -47,7 +47,7 @@ export class UploadComponent {
   }
 
   navigateToFolder(folderPath: string) {
-    this.router.navigate(['/folders'], { state: { folderPath } });
+    this.router.navigate([`/folders/${folderPath}`]);
   }
 
 
