@@ -4,12 +4,12 @@ import { Observable } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
 import { LeafletModule } from '@bluehalo/ngx-leaflet';
-
+import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
   selector: 'app-folders',
   standalone: true,
-  imports: [CommonModule, LeafletModule,],
+  imports: [CommonModule, LeafletModule],
   templateUrl: './folders.component.html',
   styleUrls: ['./folders.component.css']
 })
@@ -19,13 +19,32 @@ export class FoldersComponent implements OnInit {
   landingTimestamps: string[] = [];
   flightPath: { lat: number, lon: number, alt: number }[] = [];
   errorMessage: string = '';
+  folderPath: string = ''; // Per contenere il parametro folderPath
   private map!: L.Map;  // Mappa Leaflet
   private apiUrlLogArray = 'http://localhost:3000/log-array';
   private apiUrlNavData = 'http://localhost:3000/nav-data';
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private http: HttpClient,
+    private route: ActivatedRoute,
+    private router: Router
+  ) { }
 
   ngOnInit(): void {
+    // 1. Recupera folderPath dai parametri della route
+    this.route.paramMap.subscribe(params => {
+      this.folderPath = params.get('folderPath') || ''; // Ottieni il parametro folderPath
+      console.log('Parametro folderPath dalla route:', this.folderPath);
+    });
+
+    // 2. Recupera folderPath dallo stato del router (se presente)
+    const navigation = this.router.getCurrentNavigation();
+    if (navigation?.extras.state) {
+      this.folderPath = navigation.extras.state['folderPath'] || this.folderPath; // Usa lo stato del router se presente
+      console.log('Parametro folderPath dallo stato del router:', this.folderPath);
+    }
+
+    // Chiamate API per ottenere log e dati di volo
     console.log('📡 Richiesta in corso per /log-array');
     this.getLogArray().subscribe({
       next: (response) => {

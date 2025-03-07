@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatDividerModule } from '@angular/material/divider';
 import { HttpHeaders } from '@angular/common/http';
-import { RouterModule, Router } from '@angular/router';
+import { RouterModule, Router, } from '@angular/router';
 
 
 
@@ -47,7 +47,7 @@ export class UploadComponent {
   }
 
   navigateToFolder(folderPath: string) {
-    this.router.navigate(['/folders', folderPath]); // ✅ Naviga alla cartella
+    this.router.navigate(['/folders'], { state: { folderPath } });
   }
 
 

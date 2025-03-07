@@ -1,53 +1,22 @@
 <div class="container">
-    <h2>Log di Volo</h2>
+    <h2>{{ folderPath }}</h2>
 
     <!-- Sezione Takeoff -->
     <div class="section">
-        <h3>Decollo Rilevato</h3>
-        <ul>
-            <li *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</li>
-        </ul>
+        <h3>Decollo:</h3>
+        <p *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</p>
         <p *ngIf="takeoffTimestamps.length === 0">Nessun decollo rilevato.</p>
     </div>
 
     <!-- Sezione Landing -->
     <div class="section">
-        <h3>Atterraggio Rilevato</h3>
-        <ul>
-            <li *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</li>
-        </ul>
+        <h3>Atterraggio:</h3>
+        <p *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</p>
         <p *ngIf="landingTimestamps.length === 0">Nessun atterraggio rilevato.</p>
     </div>
 
-    <div class="section">
-        <h3>Dati di Volo</h3>
-
-        <!-- Visualizza la mappa con il tracciato del volo -->
-        <div *ngIf="flightPath && flightPath.length > 0">
-            <p><strong>Contenuto del file .nav (unico):</strong></p>
-            <table border="1" cellspacing="0" cellpadding="5">
-                <thead>
-                    <tr>
-                        <th>Latitudine</th>
-                        <th>Longitudine</th>
-                        <th>Altitudine (m)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr *ngFor="let point of flightPath">
-                        <td>{{ point.lat }}</td>
-                        <td>{{ point.lon }}</td>
-                        <td>{{ point.alt }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <p *ngIf="!flightPath || flightPath.length === 0">Nessun dato di volo disponibile.</p>
-
-        <div class="map-container">
-            <h2>Mappa del Volo</h2>
-            <div id="flightMap"></div>
-        </div>
+    <div class="map-container">
+        <div id="flightMap"></div>
     </div>
+
 </div>
