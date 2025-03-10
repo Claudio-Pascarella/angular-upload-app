@@ -20,10 +20,13 @@ export class FoldersComponent implements OnInit {
   flightPath: { lat: number, lon: number, alt: number }[] = [];
   errorMessage: string = '';
   folderPath: string = '';
-  folderName: string = '';
+  folderName: string = '';  // Variabile per memorizzare il nome della cartella
+  trolleysName: string = ''; // Variabile per memorizzare il nome della cartella
+
   private map!: L.Map;
   private apiUrlLogArray = 'http://localhost:3000/log-array';
   private apiUrlNavData = 'http://localhost:3000/nav-data';
+  private apiUrlFolderName = 'http://localhost:3000/get-folder-name';
 
   constructor(
     private http: HttpClient,
@@ -31,19 +34,8 @@ export class FoldersComponent implements OnInit {
     private router: Router
   ) { }
 
-  getFolderName(): void {
-    this.http.get<any>('http://localhost:3000/get-folder-name')
-      .subscribe(
-        (response) => {
-          this.folderName = response.folderName; // Imposta il nome della cartella
-        },
-        (error) => {
-          console.error('Errore nel recupero del nome della cartella:', error);
-        }
-      );
-  }
-
   ngOnInit(): void {
+
     // 1. Recupera folderPath dai parametri della route
     this.route.paramMap.subscribe(params => {
       this.folderPath = params.get('folderPath') || ''; // Ottieni il parametro folderPath
@@ -57,6 +49,7 @@ export class FoldersComponent implements OnInit {
       this.folderPath = navigation.extras.state['folderPath'] || this.folderPath;
       console.log('Parametro folderPath dallo stato del router:', this.folderPath);
     }
+
 
     // Chiamate API per ottenere log e dati di volo
     console.log('📡 Richiesta in corso per /log-array');
@@ -78,7 +71,6 @@ export class FoldersComponent implements OnInit {
     this.getNavData().subscribe({
       next: (response) => {
         console.log('✅ Risposta ricevuta per nav-data:', response);
-
         if (response && response.flightData && typeof response.flightData === 'string' && response.flightData.trim() !== '') {
           this.extractNavData(response.flightData);
         } else {
@@ -91,6 +83,27 @@ export class FoldersComponent implements OnInit {
         this.errorMessage = 'Errore nel recupero dei dati di volo.';
       }
     });
+
+    // Aggiunta richiesta per ottenere il nome della cartella (trolleysName)
+    console.log('📡 Richiesta in corso per /get-folder-name');
+    this.getTrolleysName().subscribe({
+      next: (response) => {
+        if (response && response.trolleysName) {
+          console.log('✅ Nome della cartella ricevuto:', response.trolleysName);
+          this.trolleysName = response.trolleysName; // Assegna il nome della cartella alla variabile
+        } else {
+          console.error('❌ Risposta del server non valida. trolleysName mancante.');
+        }
+      },
+      error: (err) => {
+        console.error('❌ Errore nel recupero del nome della cartella:', err);
+      }
+    });
+  }
+
+  // Metodo per ottenere il nome della cartella (trolleysName)
+  getTrolleysName(): Observable<any> {
+    return this.http.get<{ trolleysName: string }>(`${this.apiUrlFolderName}`);
   }
 
   getLogArray(): Observable<any> {
@@ -135,8 +148,6 @@ export class FoldersComponent implements OnInit {
   }
 
   extractNavData(flightData: string): void {
-    console.log('📄 File .nav ricevuto:', flightData.slice(0, 500)); // Mostra solo i primi 500 caratteri per debug
-
     if (!flightData || typeof flightData !== 'string' || flightData.trim() === '') {
       console.error('❌ Errore: Il file .nav è vuoto o non valido.');
       this.errorMessage = 'Errore: Il file .nav è vuoto o non valido.';
@@ -144,11 +155,9 @@ export class FoldersComponent implements OnInit {
     }
 
     const lines = flightData.split('\n').map(line => line.trim()).filter(line => line !== '');
-    console.log('📊 Dati divisi in righe:', lines); // Log delle righe separate per il debug
 
     this.flightPath = lines.map(line => {
-      const parts = line.split(';'); // Cambiato separatore per il tuo formato .nav
-      console.log('📌 Riga divisa:', parts); // Log dei dati divisi per vedere il contenuto
+      const parts = line.split(';');
 
       if (parts.length >= 4) {
         const timestamp = parts[0].trim();
@@ -156,25 +165,20 @@ export class FoldersComponent implements OnInit {
         const lon = parseFloat(parts[5].trim());
         const alt = parseFloat(parts[6].trim());
 
-        // Verifica che lat, lon, alt siano numeri validi
         if (!isNaN(lat) && !isNaN(lon) && !isNaN(alt)) {
           return { lat, lon, alt };
         } else {
           console.error('❌ Dati di volo non validi nella riga:', line);
-          return null; // Ritorna null se i dati non sono validi
+          return null;
         }
       }
-      return null; // Se la riga non ha abbastanza campi, ritorna null
-    }).filter(entry => entry !== null); // Filtra i dati null
-
-    // Log per verificare il contenuto finale di flightPath
-    console.log('📍 Dati estratti dal file .nav:', this.flightPath);
+      return null;
+    }).filter(entry => entry !== null);
 
     if (this.flightPath.length === 0) {
       console.error('❌ Nessun dato valido trovato nel file .nav');
       this.errorMessage = 'Nessun dato valido trovato nel file .nav';
     } else {
-      // Inizializza la mappa dopo aver estratto i dati
       this.initMap();
     }
   }
@@ -187,7 +191,6 @@ export class FoldersComponent implements OnInit {
 
     const firstPoint = this.flightPath[0];
 
-    // Inizializza la mappa
     this.map = L.map('flightMap', {
       center: [firstPoint.lat, firstPoint.lon],
       zoom: 13,
@@ -195,12 +198,10 @@ export class FoldersComponent implements OnInit {
       zoomControl: true
     });
 
-    // Aggiungi un layer di tile (OpenStreetMap)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
 
-    // Aggiungi il tracciato di volo
     const flightCoordinates: [number, number][] = this.flightPath.map(point => [point.lat, point.lon]);
 
     L.polyline(flightCoordinates, {
@@ -209,11 +210,9 @@ export class FoldersComponent implements OnInit {
       opacity: 0.7
     }).addTo(this.map);
 
-    // Aggiungi un marker per il punto di partenza
     const startMarker = L.marker([firstPoint.lat, firstPoint.lon]).addTo(this.map);
     startMarker.bindPopup(`<b>Partenza</b><br>Lat: ${firstPoint.lat}<br>Lon: ${firstPoint.lon}<br>Alt: ${firstPoint.alt}m`);
 
-    // Adatta la vista al tracciato di volo
     this.map.fitBounds(flightCoordinates);
   }
 }
