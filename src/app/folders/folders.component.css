@@ -7,12 +7,14 @@
     display: flex;
     flex-direction: row;
     margin-top: 3rem;
+    display: flex;
+    justify-content: center;
 }
 
 .map-container {
     width: 25rem;
     height: 25rem;
-    margin: 20px 0;
+    margin: 1.5rem 1.5rem;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 8px;
@@ -20,9 +22,14 @@
 
 }
 
+#flightMap {
+    width: 100%;
+    height: 100%;
+}
+
 .section {
-    margin-bottom: 1rem;
-    margin-top: 1rem;
+    margin: 3rem 5rem;
+
 }
 
 h3 {
@@ -35,15 +42,41 @@ p {
     margin-top: 0.5rem;
 }
 
-#flightMap {
+hr {
     width: 100%;
-    height: 100%;
+    height: 1px;
+    background-color: #000;
+    border: none;
+    margin-top: 9rem;
+}
+
+
+
+.atterraggio {
+    margin-top: 3rem;
+}
+
+.vertical-line1 {
+    width: 1px;
+    height: 38rem;
+    background-color: black;
+    margin: 0 5rem;
+    margin-left: 2rem;
 }
 
 .vertical-line {
     width: 1px;
-    height: 300px;
+    height: 38rem;
     background-color: black;
-    margin: 0.6rem 2rem;
-    margin-left: 2rem;
+    margin-left: 5rem;
+}
+
+.trolley-name {
+    margin-left: 3rem;
+}
+
+.sensor {
+    display: flex;
+    flex-direction: row;
+    gap: 2rem;
 }

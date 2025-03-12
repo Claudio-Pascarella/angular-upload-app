@@ -16,7 +16,7 @@
         </div>
 
         <!-- Sezione Landing -->
-        <div class="section">
+        <div class="section atterraggio ">
             <h3>
                 <i class="fa-solid fa-plane-arrival" style="margin-right: 0.5rem;"></i>
                 Atterraggio:
@@ -27,14 +27,36 @@
 
     </div>
 
-    <div class="vertical-line"></div>
+    <div class="vertical-line1"></div>
 
     <div class="section">
-        <h3>Trolleys: {{ trolleysName }}</h3>
+        <h3 class="trolley-name">Trolleys: {{ trolleysName }}</h3>
+
+        <div *ngIf="trolleysFolders.length > 0" class="sensor">
+
+            <p *ngFor="let folder of trolleysFolders">
+                <i class="fa-solid fa-camera" style="margin-right: 0.5rem;"></i>
+                {{ folder }}
+            </p>
+        </div>
     </div>
+
+    <div class="vertical-line"></div>
+
+
+    <div>
+        <hr>
+        <div class="map-container">
+            <div id="flightMap"></div>
+        </div>
+    </div>
+
+
+
+
 </div>
 
 
-<div class="map-container">
-    <div id="flightMap"></div>
+<div *ngFor="let target of targets">
+    <p><strong>{{ target.targetname }}</strong>: Lat: {{ target.lat }}, Lon: {{ target.lon }}</p>
 </div>
