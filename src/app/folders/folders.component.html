@@ -44,18 +44,27 @@
     <div class="vertical-line"></div>
 
 
-    <div>
-        <hr>
-        <div class="map-container">
+    <div class="map-container">
+        <div class="map">
             <div id="flightMap"></div>
         </div>
-    </div>
 
-    <div>
-        <div *ngFor="let target of targets">
-            <label>
-                <input type="checkbox" [checked]="target.visible" (change)="toggleTargetVisibility(target.targetname)">
-                {{ target.targetname }}
-            </label>
+        <div>
+            <div class="flight">
+                <label>
+                    <input type="checkbox" [checked]="showFlightPath" (change)="toggleFlightPathVisibility()">
+                    Mostra Tracciato di Volo
+                </label>
+            </div>
+
+
+            <h4 class="targets">Targets:</h4>
+            <div *ngFor="let target of uniqueTargets">
+                <label>
+                    <input type="checkbox" [checked]="target.visible"
+                        (change)="toggleTargetVisibility(target.targetname)">
+                    {{ target.targetname }}
+                </label>
+            </div>
         </div>
     </div>

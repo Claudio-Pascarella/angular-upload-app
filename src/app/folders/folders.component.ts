@@ -37,8 +37,10 @@ export class FoldersComponent implements OnInit {
   targets: Target[] = [];
   showFlightPath: boolean = true;  // Stato della checkbox per il volo
   showTargets: boolean = true;     // Stato della checkbox per i target
+  uniqueTargets: any[] = [];
 
   private map!: L.Map;
+  private flightPathLayer?: L.Polyline;
   private targetsLayer?: L.LayerGroup;
   private apiUrlLogArray = 'http://localhost:3000/log-array';
   private apiUrlNavData = 'http://localhost:3000/nav-data';
@@ -162,8 +164,8 @@ export class FoldersComponent implements OnInit {
       return;
     }
 
-    // Inizializzazione della mappa con la posizione di partenza del volo (se presente)
     const firstPoint = this.flightPath && this.flightPath.length > 0 ? this.flightPath[0] : this.targets[0];
+
     this.map = L.map('flightMap', {
       center: [firstPoint.lat, firstPoint.lon],
       zoom: 13,
@@ -175,33 +177,15 @@ export class FoldersComponent implements OnInit {
       attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
 
-    // Aggiungi il percorso dell'aereo (flightPath) sulla mappa in rosso (se disponibile)
-    if (this.flightPath && this.flightPath.length > 0) {
-      const flightCoordinates: [number, number][] = this.flightPath
-        .map(point => {
-          if (typeof point.lat === 'number' && typeof point.lon === 'number') {
-            return [point.lat, point.lon] as [number, number]; // Cast esplicito per TypeScript
-          }
-          return null; // Gestisci il caso in cui i dati non sono validi
-        })
-        .filter((coord): coord is [number, number] => coord !== null); // Filtra i valori nulli
+    // Aggiunta del tracciato di volo
+    this.updateFlightPath();
 
-      L.polyline(flightCoordinates, {
-        color: '#FF0000',  // Rosso
-        weight: 3,
-        opacity: 0.7
-      }).addTo(this.map);
-
-      // Aggiungi un marker di partenza
-      const startMarker = L.marker([flightCoordinates[0][0], flightCoordinates[0][1]]).addTo(this.map);
-      startMarker.bindPopup(`<b>Partenza</b><br>Lat: ${flightCoordinates[0][0]}<br>Lon: ${flightCoordinates[0][1]}<br>Alt: ${this.flightPath[0].alt}m`);
-    }
-
-    // Aggiungi i target sulla mappa
     if (this.targets && this.targets.length > 0) {
       this.targetsLayer = L.layerGroup().addTo(this.map);
       this.updateTargetVisibility();
     }
+
+    this.map.fitBounds([...this.flightPath.map(p => [p.lat, p.lon] as [number, number])]);
 
     // Aggiusta la mappa per includere sia il volo che i target
     const flightCoordinates: [number, number][] = this.flightPath && this.flightPath.length > 0
@@ -216,14 +200,34 @@ export class FoldersComponent implements OnInit {
         .filter(coord => coord.length === 2 && coord.every(val => !isNaN(val)))  // Verifica che ci siano esattamente 2 valori numerici
       : [];
 
-    // Unisci i percorsi del volo e i target
-    const allCoordinates: [number, number][] = [...flightCoordinates, ...targetCoordinates];
+    this.uniqueTargets = this.getUniqueTargets();
+  }
 
-    // Verifica che ci siano coordinate valide
-    if (allCoordinates.length > 0) {
-      this.map.fitBounds(allCoordinates);
-    } else {
-      console.error('❌ Nessuna coordinata valida per la mappa.');
+  getUniqueTargets() {
+    const seen = new Set();
+    return this.targets.filter(target => {
+      if (seen.has(target.targetname)) {
+        return false;
+      }
+      seen.add(target.targetname);
+      return true;
+    });
+  }
+
+  updateFlightPath(): void {
+    if (this.flightPathLayer) {
+      this.map.removeLayer(this.flightPathLayer);
+      this.flightPathLayer = undefined;
+    }
+
+    if (this.showFlightPath && this.flightPath.length > 0) {
+      const flightCoordinates: [number, number][] = this.flightPath.map(p => [p.lat, p.lon]);
+
+      this.flightPathLayer = L.polyline(flightCoordinates, {
+        color: '#FF0000', // Rosso
+        weight: 2,
+        opacity: 0.7
+      }).addTo(this.map);
     }
   }
 
@@ -261,6 +265,11 @@ export class FoldersComponent implements OnInit {
       }
     });
     this.updateTargetVisibility();
+  }
+
+  toggleFlightPathVisibility(): void {
+    this.showFlightPath = !this.showFlightPath;
+    this.updateFlightPath();
   }
 
 
