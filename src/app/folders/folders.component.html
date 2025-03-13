@@ -51,12 +51,11 @@
         </div>
     </div>
 
-
-
-
-</div>
-
-
-<div *ngFor="let target of targets">
-    <p><strong>{{ target.targetname }}</strong>: Lat: {{ target.lat }}, Lon: {{ target.lon }}</p>
-</div>
+    <div>
+        <div *ngFor="let target of targets">
+            <label>
+                <input type="checkbox" [checked]="target.visible" (change)="toggleTargetVisibility(target.targetname)">
+                {{ target.targetname }}
+            </label>
+        </div>
+    </div>

@@ -10,6 +10,7 @@ interface Target {
   targetname: string;
   lat: number;
   lon: number;
+  visible?: boolean;
 }
 
 @Component({
@@ -34,8 +35,11 @@ export class FoldersComponent implements OnInit {
   vertexCoordinates: [number, number][] = [];
   extractedTargets: { targetname: string; lat: number; lon: number }[] = [];
   targets: Target[] = [];
+  showFlightPath: boolean = true;  // Stato della checkbox per il volo
+  showTargets: boolean = true;     // Stato della checkbox per i target
 
   private map!: L.Map;
+  private targetsLayer?: L.LayerGroup;
   private apiUrlLogArray = 'http://localhost:3000/log-array';
   private apiUrlNavData = 'http://localhost:3000/nav-data';
   private apiUrlFolderName = 'http://localhost:3000/get-folder-name';
@@ -49,254 +53,117 @@ export class FoldersComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-
-    // Richiesta per ottenere i dati dal server
+    // Caricamento dei dati
     this.http.get<any>(this.apiUrlSbeconf).subscribe(
       data => {
         console.log('📥 Dati ricevuti da sbeconf.jsn:', data);
-
-        // Salva i dati nella variabile targets
         this.targets = data;
 
         if (data && data.MissionPlanInfo && Array.isArray(data.MissionPlanInfo.target)) {
           this.extractedTargets = this.extractTargetsFromJSON(data.MissionPlanInfo.target);
-          if (this.extractedTargets.length === 0) {
-            console.error('❌ Nessuna coordinate valida trovata.');
-          } else {
-            console.log('✅ Targets estratti:', this.extractedTargets);
-          }
         } else {
-          console.error('❌ La struttura del JSON non contiene "MissionPlanInfo.target".');
           this.errorMessage = 'Dati non validi';
         }
       },
       error => {
-        console.error('❌ Errore nel recupero dei dati di sbeconf.jsn:', error);
         this.errorMessage = 'Impossibile recuperare i dati dal server';
       }
     );
 
-
-
-    // 1. Recupera folderPath dai parametri della route
+    // Recupero del folderPath dai parametri della route
     this.route.paramMap.subscribe(params => {
-      this.folderPath = params.get('folderPath') || ''; // Ottieni il parametro folderPath
-      console.log('Parametro folderPath dalla route:', this.folderPath);
+      this.folderPath = params.get('folderPath') || '';
     });
 
-    // 2. Recupera folderPath dallo stato del router (se presente)
-    const navigation = this.router.getCurrentNavigation();
-    if (navigation?.extras.state) {
-      this.folderPath = navigation.extras.state['folderPath'] || this.folderPath;
-      console.log('Parametro folderPath dallo stato del router:', this.folderPath);
-    }
-
-    // Aggiunta richiesta per ottenere i nomi delle cartelle dentro "Trolleys"
-    console.log('📡 Richiesta in corso per /get-trolleys-folders');
-    this.getTrolleysFolders().subscribe({
-      next: (response) => {
-        if (response && response.folders) {
-          console.log('✅ Nomi delle cartelle ricevuti:', response.folders);
-          this.trolleysFolders = response.folders; // Assegna i nomi delle cartelle alla variabile
-        } else {
-          console.error('❌ Risposta del server non valida. Nomi delle cartelle mancanti.');
-        }
-      },
-      error: (err) => {
-        console.error('❌ Errore nel recupero dei nomi delle cartelle:', err);
-      }
+    // Altri metodi per recuperare i dati
+    this.getTrolleysFolders().subscribe(response => {
+      this.trolleysFolders = response.folders;
     });
 
-    // Chiamate API per ottenere log e dati di volo
-    console.log('📡 Richiesta in corso per /log-array');
-    this.getLogArray().subscribe({
-      next: (response) => {
-        console.log('✅ Risposta ricevuta per log-array:', response);
-        if (response && response.array) {
-          this.extractTimestamps(response.array);
-        } else {
-          console.error('❌ Risposta non valida da log-array:', response);
-        }
-      },
-      error: (err) => {
-        console.error('❌ Errore nel recupero dei log:', err);
-      }
+    this.getLogArray().subscribe(response => {
+      this.extractTimestamps(response.array);
     });
 
-    console.log('📡 Richiesta in corso per /nav-data');
-    this.getNavData().subscribe({
-      next: (response) => {
-        console.log('✅ Risposta ricevuta per nav-data:', response);
-        if (response && response.flightData && typeof response.flightData === 'string' && response.flightData.trim() !== '') {
-          this.extractNavData(response.flightData);
-        } else {
-          console.error('❌ Errore: dati di volo non validi. Risposta:', response);
-          this.errorMessage = 'Errore: dati di volo non validi.';
-        }
-      },
-      error: (err) => {
-        console.error('❌ Errore nel recupero dei dati di volo:', err);
-        this.errorMessage = 'Errore nel recupero dei dati di volo.';
-      }
+    this.getNavData().subscribe(response => {
+      this.extractNavData(response.flightData);
     });
 
-    // Aggiunta richiesta per ottenere il nome della cartella (trolleysName)
-    console.log('📡 Richiesta in corso per /get-folder-name');
-    this.getTrolleysName().subscribe({
-      next: (response) => {
-        if (response && response.trolleysName) {
-          console.log('✅ Nome della cartella ricevuto:', response.trolleysName);
-          this.trolleysName = response.trolleysName;
-          this.trolleysFolders.pop();
-        } else {
-          console.error('❌ Risposta del server non valida. trolleysName mancante.');
-        }
-      },
-      error: (err) => {
-        console.error('❌ Errore nel recupero del nome della cartella:', err);
-      }
+    this.getTrolleysName().subscribe(response => {
+      this.trolleysName = response.trolleysName;
+      this.trolleysFolders.pop();
     });
   }
 
   extractTargetsFromJSON(targets: any[]): { targetname: string; lat: number; lon: number }[] {
     let extracted: { targetname: string; lat: number; lon: number }[] = [];
+    if (!Array.isArray(targets)) return extracted;
 
-    console.log("📜 JSON ricevuto:", targets);  // DEBUG
-
-    if (!Array.isArray(targets)) {
-      console.error("❌ ERRORE: 'targets' non è un array!", targets);
-      return extracted;
-    }
-
-    // Itera su ogni target
     targets.forEach((target: any) => {
-      console.log("🎯 Target:", target); // DEBUG
-
-      const targetname: string = target["@targetname"] || "Senza nome";  // Estrai @targetname
-
-      // Verifica se il target ha dei vertexes
+      const targetname: string = target["@targetname"] || "Senza nome";
       if (target.vertexes && Array.isArray(target.vertexes)) {
         target.vertexes.forEach((vertex: any) => {
-          console.log("📌 Vertex:", vertex); // DEBUG
-
           if (vertex.wgs84_coord) {
-            // Estrai lat e lon
             const lat = parseFloat(vertex.wgs84_coord["@lat"]);
             const lon = parseFloat(vertex.wgs84_coord["@lon"]);
-
             if (!isNaN(lat) && !isNaN(lon)) {
-              // Aggiungi il target con le coordinate valide
               extracted.push({ targetname, lat, lon });
-              console.log(`✅ Target valido: ${targetname} -> Lat: ${lat}, Lon: ${lon}`);
-            } else {
-              console.warn(`⚠️ Coordinate non valide per target "${targetname}":`, vertex);
             }
           }
         });
-      } else {
-        console.warn(`⚠️ Nessun vertex per target "${targetname}".`, target);
       }
     });
-
     return extracted;
   }
 
-
-
-
-  // Metodo per ottenere i nomi delle cartelle dentro "Trolleys"
   getTrolleysFolders(): Observable<any> {
     return this.http.get<{ folders: string[] }>(this.apiUrlTrolleysFolders);
   }
 
-  // Metodo per ottenere il nome della cartella (trolleysName)
   getTrolleysName(): Observable<any> {
-    return this.http.get<{ trolleysName: string }>(`${this.apiUrlFolderName}`);
+    return this.http.get<{ trolleysName: string }>(this.apiUrlFolderName);
   }
 
   getLogArray(): Observable<any> {
-    return this.http.get<any>(this.apiUrlLogArray, {
-      params: { path: 'Volo20250210-IT-PIE06/Mission/BIU/02101335.log' }
-    });
+    return this.http.get<any>(this.apiUrlLogArray, { params: { path: 'Volo20250210-IT-PIE06/Mission/BIU/02101335.log' } });
   }
 
   getNavData(): Observable<any> {
-    return this.http.get<any>(this.apiUrlNavData, {
-      params: { path: 'Volo20250210-IT-PIE06/Mission/BIU/02101335.nav' }
-    });
+    return this.http.get<any>(this.apiUrlNavData, { params: { path: 'Volo20250210-IT-PIE06/Mission/BIU/02101335.nav' } });
   }
 
   extractTimestamps(logArray: string[]): void {
-    this.takeoffTimestamps = logArray
-      .filter(line => line.includes("INFO: TAKEOFF DETECTED"))
-      .map(line => {
-        const parts = line.split(' - ');
-        if (parts.length > 0) {
-          const timestamp = parts[0].trim();
-          const date = new Date(parseInt(timestamp) * 1000);
-          return date.toLocaleString();
-        }
-        return 'Data non valida';
-      });
-
-    this.landingTimestamps = logArray
-      .filter(line => line.includes("INFO: LANDING DETECTED"))
-      .map(line => {
-        const parts = line.split(' - ');
-        if (parts.length > 0) {
-          const timestamp = parts[0].trim();
-          const date = new Date(parseInt(timestamp) * 1000);
-          return date.toLocaleString();
-        }
-        return 'Data non valida';
-      });
-
-    console.log('🛫 Takeoff timestamps:', this.takeoffTimestamps);
-    console.log('🛬 Landing timestamps:', this.landingTimestamps);
+    this.takeoffTimestamps = logArray.filter(line => line.includes("INFO: TAKEOFF DETECTED"))
+      .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
+    this.landingTimestamps = logArray.filter(line => line.includes("INFO: LANDING DETECTED"))
+      .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
   }
 
   extractNavData(flightData: string): void {
-    if (!flightData || typeof flightData !== 'string' || flightData.trim() === '') {
-      console.error('❌ Errore: Il file .nav è vuoto o non valido.');
-      this.errorMessage = 'Errore: Il file .nav è vuoto o non valido.';
-      return;
-    }
+    if (!flightData) return;
 
     const lines = flightData.split('\n').map(line => line.trim()).filter(line => line !== '');
-
     this.flightPath = lines.map(line => {
       const parts = line.split(';');
-
       if (parts.length >= 4) {
-        const timestamp = parts[0].trim();
         const lat = parseFloat(parts[4].trim());
         const lon = parseFloat(parts[5].trim());
         const alt = parseFloat(parts[6].trim());
-
-        if (!isNaN(lat) && !isNaN(lon) && !isNaN(alt)) {
-          return { lat, lon, alt };
-        } else {
-          console.error('❌ Dati di volo non validi in questa riga:', line);
-        }
+        return { lat, lon, alt };
       }
       return null;
     }).filter(item => item !== null);
-
-    console.log('✅ Dati di volo estratti:', this.flightPath);
     this.initMap();
+
   }
 
-
   initMap(): void {
-    if (!this.flightPath || this.flightPath.length === 0) {
+    if ((!this.targets || this.targets.length === 0) && (!this.flightPath || this.flightPath.length === 0)) {
       console.error('❌ Nessun dato disponibile per la mappa.');
       return;
     }
 
-    const firstPoint = this.flightPath[0];
-    console.log('Dati di vertexCoordinates:', this.vertexCoordinates);
-
-    // Inizializzazione della mappa con la posizione di partenza del volo
+    // Inizializzazione della mappa con la posizione di partenza del volo (se presente)
+    const firstPoint = this.flightPath && this.flightPath.length > 0 ? this.flightPath[0] : this.targets[0];
     this.map = L.map('flightMap', {
       center: [firstPoint.lat, firstPoint.lon],
       zoom: 13,
@@ -308,53 +175,94 @@ export class FoldersComponent implements OnInit {
       attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
 
-    // Aggiungi il percorso dell'aereo (flightPath) sulla mappa in rosso
-    const flightCoordinates: [number, number][] = this.flightPath.map(point => [point.lat, point.lon]);
-    L.polyline(flightCoordinates, {
-      color: '#FF0000',  // Rosso
-      weight: 3,
-      opacity: 0.7
-    }).addTo(this.map);
+    // Aggiungi il percorso dell'aereo (flightPath) sulla mappa in rosso (se disponibile)
+    if (this.flightPath && this.flightPath.length > 0) {
+      const flightCoordinates: [number, number][] = this.flightPath
+        .map(point => {
+          if (typeof point.lat === 'number' && typeof point.lon === 'number') {
+            return [point.lat, point.lon] as [number, number]; // Cast esplicito per TypeScript
+          }
+          return null; // Gestisci il caso in cui i dati non sono validi
+        })
+        .filter((coord): coord is [number, number] => coord !== null); // Filtra i valori nulli
 
-    // Aggiungi un marker di partenza
-    const startMarker = L.marker([firstPoint.lat, firstPoint.lon]).addTo(this.map);
-    startMarker.bindPopup(`<b>Partenza</b><br>Lat: ${firstPoint.lat}<br>Lon: ${firstPoint.lon}<br>Alt: ${firstPoint.alt}m`);
+      L.polyline(flightCoordinates, {
+        color: '#FF0000',  // Rosso
+        weight: 3,
+        opacity: 0.7
+      }).addTo(this.map);
 
-    // Raggruppa dinamicamente i target in base al targetname
-    const targetsGrouped = this.targets.reduce((groups, t: Target) => {  // Specifica esplicitamente il tipo per 't'
-      if (t.targetname) {
-        if (!groups[t.targetname]) {
-          groups[t.targetname] = [];
-        }
-        groups[t.targetname].push({ lat: t.lat, lon: t.lon });
-      }
-      return groups;
-    }, {} as { [key: string]: { lat: number, lon: number }[] });
+      // Aggiungi un marker di partenza
+      const startMarker = L.marker([flightCoordinates[0][0], flightCoordinates[0][1]]).addTo(this.map);
+      startMarker.bindPopup(`<b>Partenza</b><br>Lat: ${flightCoordinates[0][0]}<br>Lon: ${flightCoordinates[0][1]}<br>Alt: ${this.flightPath[0].alt}m`);
+    }
 
-    // Ciclo attraverso ogni gruppo di target e crea i rettangoli
-    for (const targetName in targetsGrouped) {
-      const targetGroup = targetsGrouped[targetName];
-
-      if (targetGroup.length >= 3) {  // Assicurati che ci siano almeno 3 punti per formare un rettangolo
-        const polygonCoords: [number, number][] = targetGroup.map(t => [t.lat, t.lon]);
-
-        // Crea il rettangolo blu per il gruppo di target
-        L.polygon(polygonCoords, {
-          color: '#0000FF',  // Blu
-          weight: 2,
-          opacity: 0.7,
-          fillColor: '#0000FF',  // Colore di riempimento per il rettangolo
-          fillOpacity: 0.2
-        }).addTo(this.map);
-      }
+    // Aggiungi i target sulla mappa
+    if (this.targets && this.targets.length > 0) {
+      this.targetsLayer = L.layerGroup().addTo(this.map);
+      this.updateTargetVisibility();
     }
 
     // Aggiusta la mappa per includere sia il volo che i target
-    const allCoordinates: [number, number][] = [
-      ...flightCoordinates,
-      ...(this.targets ? this.targets.map(t => [t.lat, t.lon] as [number, number]) : [])
-    ];
-    this.map.fitBounds(allCoordinates);
+    const flightCoordinates: [number, number][] = this.flightPath && this.flightPath.length > 0
+      ? this.flightPath
+        .map(point => [point.lat, point.lon] as [number, number])  // Forza il tipo [number, number]
+        .filter(coord => coord.length === 2 && coord.every(val => !isNaN(val)))  // Verifica che ci siano esattamente 2 valori numerici
+      : [];
+
+    const targetCoordinates: [number, number][] = this.targets && this.targets.length > 0
+      ? this.targets
+        .map(t => [t.lat, t.lon] as [number, number])  // Forza il tipo [number, number]
+        .filter(coord => coord.length === 2 && coord.every(val => !isNaN(val)))  // Verifica che ci siano esattamente 2 valori numerici
+      : [];
+
+    // Unisci i percorsi del volo e i target
+    const allCoordinates: [number, number][] = [...flightCoordinates, ...targetCoordinates];
+
+    // Verifica che ci siano coordinate valide
+    if (allCoordinates.length > 0) {
+      this.map.fitBounds(allCoordinates);
+    } else {
+      console.error('❌ Nessuna coordinata valida per la mappa.');
+    }
   }
+
+  updateTargetVisibility(): void {
+    if (!this.targetsLayer) return;
+    this.targetsLayer.clearLayers();
+
+    const targetsGrouped = this.targets.reduce((groups, t) => {
+      if (t.visible) {
+        if (!groups[t.targetname]) {
+          groups[t.targetname] = [];
+        }
+        groups[t.targetname].push([t.lat, t.lon]);
+      }
+      return groups;
+    }, {} as { [key: string]: [number, number][] });
+
+    for (const targetName in targetsGrouped) {
+      if (targetsGrouped[targetName].length >= 3) {
+        L.polygon(targetsGrouped[targetName], {
+          color: '#0000FF',
+          weight: 2,
+          opacity: 0.7,
+          fillColor: '#0000FF',
+          fillOpacity: 0.2
+        }).addTo(this.targetsLayer);
+      }
+    }
+  }
+
+  toggleTargetVisibility(targetName: string): void {
+    this.targets.forEach(t => {
+      if (t.targetname === targetName) {
+        t.visible = !t.visible;
+      }
+    });
+    this.updateTargetVisibility();
+  }
+
+
 
 }
