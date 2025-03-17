@@ -11,6 +11,13 @@
     justify-content: center;
 }
 
+.container-flight {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 3rem;
+}
+
 .map-container {
     display: flex;
     flex-direction: row;
@@ -36,6 +43,7 @@
     margin: 3rem 5rem;
 
 }
+
 
 h3 {
     margin: 0px;
@@ -95,4 +103,13 @@ hr {
 
 .strobe {
     margin-top: 2rem;
+}
+
+.ilx {
+    margin-left: 8.5rem;
+    margin-top: 1rem;
+}
+
+.time-fly {
+    margin-left: 3rem;
 }

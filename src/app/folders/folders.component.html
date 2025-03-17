@@ -4,9 +4,9 @@
 
 
 <div class="container">
-    <div>
+    <div class="container-flight">
         <!-- Sezione Takeoff -->
-        <div class="section">
+        <div class="section-flight">
             <h3>
                 <i class="fa-solid fa-plane-departure" style="margin-right: 0.5rem;"></i>
                 Decollo:
@@ -25,6 +25,15 @@
             <p *ngIf="landingTimestamps.length === 0">Nessun atterraggio rilevato.</p>
         </div>
 
+        <div *ngIf="totalDurationInSeconds > 0" class="section-flight">
+            <h3>
+                <i class="fa-solid fa-plane-up"></i>
+                Durata volo:
+            </h3>
+            <p class="time-fly">{{convertSecondsToHMS(totalDurationInSeconds) }}</p>
+        </div>
+
+
     </div>
 
     <div class="vertical-line1"></div>
@@ -41,16 +50,18 @@
         </div>
 
 
-        <div *ngIf="me1Data && me1Data.length > 0">
-            <p>Totale Trigger: {{ me1Data.length }}</p>
+        <div class="ilx">
+            <div *ngIf="me1Data && me1Data.length > 0">
+                <p>Totale Trigger: {{ me1Data.length }}</p>
+            </div>
+
+
+            <div *ngIf="ms1Data.length > 0">
+                <p>Totale Strobe: {{ ms1Data.length }}</p>
+            </div>
+
+            <p>Totale immagini: {{ imageCount }}</p>
         </div>
-
-
-        <div *ngIf="ms1Data.length > 0">
-            <p>Totale Strobe: {{ ms1Data.length }}</p>
-        </div>
-
-        <p>Totale immagini: {{ imageCount }}</p>
 
     </div>
 

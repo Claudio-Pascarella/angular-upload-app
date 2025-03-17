@@ -42,6 +42,7 @@ export class FoldersComponent implements OnInit {
   showMs1: boolean = false;
   me1Data: any[] = [];
   imageCount: number = 0;
+  totalDurationInSeconds: number = 0;
 
 
   private map!: L.Map;
@@ -136,6 +137,8 @@ export class FoldersComponent implements OnInit {
 
   }
 
+
+
   getlastIndex(): number {
     const lastItem = this.me1Data[this.me1Data.length - 1];
     return this.me1Data.length
@@ -207,6 +210,43 @@ export class FoldersComponent implements OnInit {
       .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
     this.landingTimestamps = logArray.filter(line => line.includes("INFO: LANDING DETECTED"))
       .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
+
+    // Somma delle differenze (in secondi, puoi cambiare unità come desideri)
+    this.totalDurationInSeconds = this.calculateTotalDurationInSeconds();
+  }
+
+  calculateTotalDurationInSeconds(): number {
+    let totalDuration = 0;
+
+    // Assumiamo che i timestamp di atterraggio e decollo siano sincronizzati
+    for (let i = 0; i < Math.min(this.takeoffTimestamps.length, this.landingTimestamps.length); i++) {
+      const takeoff = new Date(this.takeoffTimestamps[i]);
+      const landing = new Date(this.landingTimestamps[i]);
+
+      // Calcola la differenza in millisecondi e poi convertila in secondi
+      const durationInMilliseconds = landing.getTime() - takeoff.getTime();
+      const durationInSeconds = durationInMilliseconds / 1000;
+
+      // Aggiungi la durata alla somma totale
+      totalDuration += durationInSeconds;
+    }
+
+    return totalDuration;
+  }
+
+  // Funzione per convertire i secondi in formato ore:minuti:secondi
+  convertSecondsToHMS(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const sec = seconds % 60;
+
+    // Restituisce la stringa formattata in HH:MM:SS
+    return `${this.padZero(hours)}:${this.padZero(minutes)}:${this.padZero(sec)}`;
+  }
+
+  // Funzione di supporto per aggiungere uno zero davanti ai numeri singoli
+  padZero(num: number): string {
+    return num < 10 ? `0${num}` : `${num}`;
   }
 
   extractNavData(flightData: string): void {
