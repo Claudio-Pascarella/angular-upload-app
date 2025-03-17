@@ -38,10 +38,15 @@ export class FoldersComponent implements OnInit {
   showFlightPath: boolean = true;  // Stato della checkbox per il volo
   showTargets: boolean = true;     // Stato della checkbox per i target
   uniqueTargets: any[] = [];
+  ms1Data: any[] = [];
+  showMs1: boolean = false;
+  me1Data: any[] = [];
+  imageCount: number = 0;
+
 
   private map!: L.Map;
   private flightPathLayer?: L.Polyline;
-  private targetsLayer?: L.LayerGroup;
+  private targetsLayer: L.LayerGroup = L.layerGroup();
   private apiUrlLogArray = 'http://localhost:3000/log-array';
   private apiUrlNavData = 'http://localhost:3000/nav-data';
   private apiUrlFolderName = 'http://localhost:3000/get-folder-name';
@@ -54,7 +59,39 @@ export class FoldersComponent implements OnInit {
     private router: Router
   ) { }
 
+
   ngOnInit(): void {
+
+    this.http.get<{ count: number }>('http://localhost:3000/api/image-count').subscribe(
+      data => {
+        this.imageCount = data.count; // Assegna il numero di immagini
+      },
+      error => {
+        console.error('Errore nel recupero del numero di immagini:', error);
+      }
+    );
+
+
+    // Chiamata API per recuperare i dati dal server
+    this.http.get<{ data: any[] }>('http://localhost:3000/api/me1')
+      .subscribe(
+        (response) => {
+          this.me1Data = response.data; // Assegna i dati ricevuti alla variabile me1Data
+          console.log(this.me1Data); // Log per assicurarsi che i dati siano correttamente caricati
+        },
+        (error) => {
+          console.error('Errore nel recupero dei dati:', error);
+        }
+      );
+
+    //File MS
+    this.http.get<any[]>('http://localhost:3000/api/ms1').subscribe(
+      data => {
+        console.log('📥 Dati ricevuti:', data);
+        this.ms1Data = data;
+      },
+      error => console.error('Errore nel recupero dati:', error)
+    );
     // Caricamento dei dati
     this.http.get<any>(this.apiUrlSbeconf).subscribe(
       data => {
@@ -94,6 +131,38 @@ export class FoldersComponent implements OnInit {
       this.trolleysName = response.trolleysName;
       this.trolleysFolders.pop();
     });
+
+    this.loadTrolleysFolders();
+
+  }
+
+  getlastIndex(): number {
+    const lastItem = this.me1Data[this.me1Data.length - 1];
+    return this.me1Data.length
+  }
+
+  getTotalElements() {
+    return this.ms1Data.length;
+  }
+
+  loadTrolleysFolders() {
+    this.http.get<{ folders: string[] }>(this.apiUrlTrolleysFolders).subscribe(response => {
+      this.trolleysFolders = response.folders; // Imposta l'array di cartelle
+    });
+  }
+
+  // Funzione per navigare al componente Sensor
+  navigateToSensor(folder: string) {
+    // Crea una copia dell'array trolleysFolders
+    const folderArrayCopy = [...this.trolleysFolders];
+
+    // Rimuovi l'ultimo elemento dalla copia
+    folderArrayCopy.pop();
+
+    // Naviga al componente Sensor con il nome della cartella
+    if (folderArrayCopy.length > 0) {
+      this.router.navigate(['/sensor', folder]);
+    }
   }
 
   extractTargetsFromJSON(targets: any[]): { targetname: string; lat: number; lon: number }[] {
@@ -203,6 +272,16 @@ export class FoldersComponent implements OnInit {
     this.uniqueTargets = this.getUniqueTargets();
   }
 
+  loadMe1Data(): void {
+    this.http.get<any[]>('http://localhost:3000/api/me1').subscribe(
+      data => {
+        console.log('📥 Dati .me1 ricevuti:', data);
+        this.me1Data = data;
+      },
+      error => console.error('Errore nel recupero dati .me1:', error)
+    );
+  }
+
   getUniqueTargets() {
     const seen = new Set();
     return this.targets.filter(target => {
@@ -272,6 +351,60 @@ export class FoldersComponent implements OnInit {
     this.updateFlightPath();
   }
 
+  updateMs1Visibility(): void {
+    if (!this.ms1Data || this.ms1Data.length === 0) return; // Verifica che i dati siano disponibili
 
+    // Se targetsLayer è undefined, inizializzalo
+    if (!this.targetsLayer) {
+      this.targetsLayer = L.layerGroup();  // Inizializza targetsLayer se è undefined
+      this.targetsLayer.addTo(this.map);    // Aggiungi targetsLayer alla mappa
+    }
+
+    this.targetsLayer.clearLayers(); // Rimuove i marker esistenti
+
+    // Personalizza il punto (marker) per i dati MS1
+    const ms1MarkerOptions = {
+      radius: 2, // Imposta il raggio del cerchio
+      ffillColor: '#8A2BE2', // Colore di riempimento (viola)
+      color: '#4B0082', // Colore del bordo (viola scuro)
+      weight: 1, // Spessore del bordo
+      opacity: 1, // Opacità
+      fillOpacity: 0.6 // Opacità del riempimento
+    };
+
+    this.ms1Data.forEach(point => {
+      // Aggiungi un cerchio per ogni punto ms1Data
+      L.circleMarker([point.lat, point.lon], ms1MarkerOptions)
+        .addTo(this.targetsLayer)
+        .bindPopup(`Target: ${point.targetname}`); // Mostra info al click
+    });
+  }
+
+
+  toggleMs1Polygons(): void {
+    this.showMs1 = !this.showMs1;
+
+    if (!this.targetsLayer) {
+      console.warn('targetsLayer non è inizializzato!');
+      return;
+    }
+
+    if (this.showMs1) {
+      this.updateMs1Visibility();
+    } else {
+      this.targetsLayer.clearLayers(); // Rimuove i poligoni se disattivato
+    }
+  }
+
+  toggleMs1(): void {
+    this.showMs1 = !this.showMs1;
+
+    if (!this.targetsLayer) {
+      console.warn('targetsLayer non è inizializzato!');
+      return;
+    }
+
+    this.updateMs1Visibility();
+  }
 
 }

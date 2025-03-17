@@ -4,5 +4,5 @@ import { FoldersComponent } from './folders/folders.component';
 
 export const routes: Routes = [
     { path: '', component: UploadComponent },
-    { path: 'folders/:folderPath', component: FoldersComponent }
+    { path: 'folders/:folderPath', component: FoldersComponent },
 ];

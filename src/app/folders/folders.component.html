@@ -28,17 +28,30 @@
     </div>
 
     <div class="vertical-line1"></div>
-
     <div class="section">
         <h3 class="trolley-name">Trolleys: {{ trolleysName }}</h3>
 
         <div *ngIf="trolleysFolders.length > 0" class="sensor">
-
-            <p *ngFor="let folder of trolleysFolders">
-                <i class="fa-solid fa-camera" style="margin-right: 0.5rem;"></i>
-                {{ folder }}
+            <p *ngFor="let folder of trolleysFolders; let i = index">
+                <a *ngIf="i < trolleysFolders.length - 1">
+                    <i class="fa-solid fa-camera" style="margin-right: 0.5rem;"></i>
+                    {{ folder }}
+                </a>
             </p>
         </div>
+
+
+        <div *ngIf="me1Data && me1Data.length > 0">
+            <p>Totale Trigger: {{ me1Data.length }}</p>
+        </div>
+
+
+        <div *ngIf="ms1Data.length > 0">
+            <p>Totale Strobe: {{ ms1Data.length }}</p>
+        </div>
+
+        <p>Totale immagini: {{ imageCount }}</p>
+
     </div>
 
     <div class="vertical-line"></div>
@@ -66,5 +79,15 @@
                     {{ target.targetname }}
                 </label>
             </div>
+
+            <div class="strobe">
+                <label>
+                    <input type="checkbox" (change)=" toggleMs1Polygons()">
+                    Mostra Strobe
+                </label>
+            </div>
         </div>
+
+
+
     </div>
