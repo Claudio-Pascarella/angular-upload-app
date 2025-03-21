@@ -4,11 +4,12 @@
 
 
 <div class="container">
+
     <div class="container-flight">
-        <!-- Sezione Takeoff -->
+
         <div class="section-flight">
             <h3>
-                <i class="fa-solid fa-plane-departure" style="margin-right: 0.5rem;"></i>
+                <i class="fa-solid fa-plane-departure"></i>
                 Decollo:
             </h3>
             <p *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</p>
@@ -16,9 +17,9 @@
         </div>
 
         <!-- Sezione Landing -->
-        <div class="section atterraggio ">
+        <div class="section-flight">
             <h3>
-                <i class="fa-solid fa-plane-arrival" style="margin-right: 0.5rem;"></i>
+                <i class="fa-solid fa-plane-arrival"></i>
                 Atterraggio:
             </h3>
             <p *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</p>
@@ -30,25 +31,45 @@
                 <i class="fa-solid fa-plane-up"></i>
                 Durata volo:
             </h3>
-            <p class="time-fly">{{convertSecondsToHMS(totalDurationInSeconds) }}</p>
+            <p class="p-flight">{{convertSecondsToHMS(totalDurationInSeconds) }}</p>
+        </div>
+
+        <div *ngIf="totalDistance" class="section-flight">
+            <h3>
+                <i class="fa-solid fa-earth-europe"></i>
+                Lunghezza volo:
+            </h3>
+            <p>{{ totalDistance | number: '1.0-2' }} km</p>
+        </div>
+
+
+        <div *ngFor="let target of uniqueTargets" style="margin-top: 2rem;">
+            <p><strong>Target: {{ target.targetname }}</strong></p>
+            <ul>
+                <li>Lunghezza Target: {{ target.totalDistance | number:'1.2-2' }} km</li>
+                <li>Tempo di volo: {{ formatFlightTime(target.flightTime) }}</li>
+            </ul>
         </div>
 
 
     </div>
 
+
+
     <div class="vertical-line1"></div>
-    <div class="section">
+
+    <div class="section-trolley">
+
         <h3 class="trolley-name">Trolleys: {{ trolleysName }}</h3>
-
-        <div *ngIf="trolleysFolders.length > 0" class="sensor">
-            <p *ngFor="let folder of trolleysFolders; let i = index">
-                <a *ngIf="i < trolleysFolders.length - 1">
-                    <i class="fa-solid fa-camera" style="margin-right: 0.5rem;"></i>
+        <div *ngIf="trolleysFolders.length > 1" class="sensor">
+            <ng-container *ngFor="let folder of trolleysFolders; let i = index">
+                <p *ngIf="i < trolleysFolders.length - 1">
+                    <i class="fa-solid fa-camera"></i>
                     {{ folder }}
-                </a>
-            </p>
+                </p>
+                <hr *ngIf="i < trolleysFolders.length - 2" class="vertical-line2">
+            </ng-container>
         </div>
-
 
         <div class="ilx">
             <div *ngIf="me1Data && me1Data.length > 0">

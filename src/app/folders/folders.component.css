@@ -3,20 +3,74 @@
 }
 
 .container {
-    margin: 0 2rem;
     display: flex;
     flex-direction: row;
     margin-top: 3rem;
     display: flex;
-    justify-content: center;
 }
 
+/*****Dati Volo ****/
 .container-flight {
     display: flex;
     flex-direction: column;
-    align-items: center;
     margin-top: 3rem;
+    margin: 0 2rem;
 }
+
+.section-flight {
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: row;
+
+}
+
+.section-target {
+    margin-top: 2rem;
+}
+
+.target-name {
+    margin-left: 1rem;
+}
+
+
+
+/******Trolley****/
+.section-trolley {
+    display: flex;
+    flex-direction: column;
+    margin: 2rem 1rem;
+}
+
+.trolley-name {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+}
+
+.sensor {
+    display: flex;
+    flex-direction: row;
+    gap: 4rem;
+    margin-top: 2rem;
+}
+
+.ilx {
+    display: flex;
+    flex-direction: column;
+    align-items: end;
+    margin-top: -30rem;
+}
+
+
+.vertical-line2 {
+    width: 1px;
+    height: 32.5rem;
+    background-color: black;
+    margin-top: 0rem;
+    margin: 0 1rem;
+}
+
+
 
 .map-container {
     display: flex;
@@ -39,10 +93,7 @@
     height: 100%;
 }
 
-.section {
-    margin: 3rem 5rem;
 
-}
 
 
 h3 {
@@ -52,7 +103,8 @@ h3 {
 
 p {
     margin: 0px;
-    margin-top: 0.5rem;
+    margin-top: 0.2rem;
+    margin-left: 1rem;
 }
 
 hr {
@@ -64,16 +116,10 @@ hr {
 }
 
 
-
-.atterraggio {
-    margin-top: 3rem;
-}
-
 .vertical-line1 {
     width: 1px;
     height: 38rem;
     background-color: black;
-    margin-left: 2rem;
 }
 
 .vertical-line {
@@ -82,15 +128,9 @@ hr {
     background-color: black;
 }
 
-.trolley-name {
-    margin-left: 3rem;
-}
 
-.sensor {
-    display: flex;
-    flex-direction: row;
-    gap: 2rem;
-}
+
+
 
 .targets {
     margin: 0;
@@ -103,13 +143,4 @@ hr {
 
 .strobe {
     margin-top: 2rem;
-}
-
-.ilx {
-    margin-left: 8.5rem;
-    margin-top: 1rem;
-}
-
-.time-fly {
-    margin-left: 3rem;
 }

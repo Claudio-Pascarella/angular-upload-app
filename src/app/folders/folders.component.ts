@@ -6,11 +6,12 @@ import * as L from 'leaflet';
 import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import { ActivatedRoute, Router } from '@angular/router';
 
-interface Target {
-  targetname: string;
-  lat: number;
-  lon: number;
-  visible?: boolean;
+
+interface TargetTimestamps {
+  [key: string]: {
+    IN: string[];
+    OUT: string[];
+  };
 }
 
 @Component({
@@ -33,8 +34,8 @@ export class FoldersComponent implements OnInit {
   sbeconfData: any = null;
   vertexes: any[] = [];
   vertexCoordinates: [number, number][] = [];
-  extractedTargets: { targetname: string; lat: number; lon: number }[] = [];
-  targets: Target[] = [];
+  extractedTargets: { targetname: string; lat: number; lon: number; length: number }[] = [];
+  targets: any[] = [];
   showFlightPath: boolean = true;  // Stato della checkbox per il volo
   showTargets: boolean = true;     // Stato della checkbox per i target
   uniqueTargets: any[] = [];
@@ -43,7 +44,17 @@ export class FoldersComponent implements OnInit {
   me1Data: any[] = [];
   imageCount: number = 0;
   totalDurationInSeconds: number = 0;
-
+  totalDistance: number = 0;
+  targetsData: any[] = [];
+  totalDistancesPerGroup: { [key: string]: number } = {};  // Usa un oggetto con chiavi stringa
+  targetDistances: { [key: string]: number[] } = {};
+  flightStartTime: number = 0; // Timestamp di inizio volo 
+  flightEndTime: number = 0;   // Timestamp di fine volo 
+  entryTimestamp: number = 0;  // Quando il drone entra nel target
+  exitTimestamp: number = 0;
+  timestamps: TargetTimestamps = {};
+  flightTimes: { [key: string]: number } = {};
+  targetFlightTimes: { targetname: string; flightTime: number }[] = [];
 
   private map!: L.Map;
   private flightPathLayer?: L.Polyline;
@@ -57,12 +68,11 @@ export class FoldersComponent implements OnInit {
   constructor(
     private http: HttpClient,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
   ) { }
 
 
   ngOnInit(): void {
-
     this.http.get<{ count: number }>('http://localhost:3000/api/image-count').subscribe(
       data => {
         this.imageCount = data.count; // Assegna il numero di immagini
@@ -93,20 +103,19 @@ export class FoldersComponent implements OnInit {
       },
       error => console.error('Errore nel recupero dati:', error)
     );
-    // Caricamento dei dati
-    this.http.get<any>(this.apiUrlSbeconf).subscribe(
-      data => {
-        console.log('📥 Dati ricevuti da sbeconf.jsn:', data);
-        this.targets = data;
 
-        if (data && data.MissionPlanInfo && Array.isArray(data.MissionPlanInfo.target)) {
-          this.extractedTargets = this.extractTargetsFromJSON(data.MissionPlanInfo.target);
-        } else {
-          this.errorMessage = 'Dati non validi';
-        }
+    this.http.get<any[]>(this.apiUrlSbeconf).subscribe(
+      data => {
+        console.log('Dati ricevuti da sbeconf:', data);  // Verifica la struttura dei dati
+        this.targets = data; // Salviamo i dati dei target
+
+        // Assicurati che i dati contengano il campo targetId
+        this.extractTargetsFromJSON(this.targets);
+
+        this.calculateTargetDistances(); // Calcoliamo le distanze
       },
       error => {
-        this.errorMessage = 'Impossibile recuperare i dati dal server';
+        console.error('Errore nella chiamata a sbeconf:', error);
       }
     );
 
@@ -135,9 +144,108 @@ export class FoldersComponent implements OnInit {
 
     this.loadTrolleysFolders();
 
+    this.http.get<any[]>(this.apiUrlSbeconf).subscribe(
+      data => {
+        console.log('Dati ricevuti da sbeconf:', data);
+        this.targets = data; // Salva i dati dei target
+
+        // Raggruppa i target per targetname
+        const targetGroups = this.groupTargetsByName();
+
+        // Assegna targetId univoci ai gruppi
+        this.assignTargetIdsToGroups(targetGroups);
+
+        // Assegna i flightTime ai target
+        this.assignFlightTimes(this.targets, this.flightTimes);
+
+        // Filtra i target per targetname unici
+        this.uniqueTargets = this.getUniqueTargets(this.targets);
+
+        // Calcola la lunghezza totale per ogni target unico
+        this.uniqueTargets.forEach(target => {
+          target.totalDistance = this.calculateTotalDistanceForTarget(target.targetname);
+        });
+
+        console.log('Targets unici con tempi di volo e lunghezza totale:', this.uniqueTargets);
+
+        // Calcola i flightTimes (supponiamo che questo metodo sia già implementato)
+        this.flightTimes = this.calculateFlightTime();
+
+        // Associa i flightTime ai target
+        this.assignFlightTimesToTargets(this.targets, this.flightTimes);
+
+        console.log('Targets con tempi di volo:', this.targets); // Verifica qui
+      },
+      error => {
+        console.error('Errore nella chiamata a sbeconf:', error);
+      }
+    );
+
   }
 
 
+  calculateTotalDistanceForTarget(targetName: string): number {
+    // Filtra i target per nome
+    const targetsForName = this.targets.filter(t => t.targetname === targetName);
+
+    let totalDistance = 0;
+
+    // Calcola la distanza tra i punti consecutivi
+    for (let i = 1; i < targetsForName.length; i++) {
+      const target1 = targetsForName[i - 1];
+      const target2 = targetsForName[i];
+      totalDistance += this.haversineDistance(target1.lat, target1.lon, target2.lat, target2.lon);
+    }
+
+    return totalDistance / 1000; // Converti da metri a chilometri
+  }
+  assignFlightTimes(targets: any[], flightTimes: { [key: number]: number }): void {
+    targets.forEach(target => {
+      if (flightTimes.hasOwnProperty(target.targetId)) {
+        target.flightTime = flightTimes[target.targetId];
+      }
+    });
+  }
+
+  formatFlightTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600); // Calcola le ore
+    const minutes = Math.floor((seconds % 3600) / 60); // Calcola i minuti
+    const secs = seconds % 60; // Calcola i secondi
+
+    // Formatta il tempo come HH:MM
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  assignTargetIdsToGroups(targetGroups: { [key: string]: any[] }): void {
+    let nextId = 0; // Partiamo da 0
+
+    for (const targetname of Object.keys(targetGroups)) {
+      targetGroups[targetname].forEach(target => {
+        target.targetId = nextId; // Assegna lo stesso ID a tutti i target con lo stesso nome
+      });
+      nextId++; // Incrementa l'ID per il prossimo gruppo
+    }
+  }
+  assignFlightTimesToTargets(targets: any[], flightTimes: { [key: string]: number }): void {
+    targets.forEach(target => {
+      if (target.targetId !== undefined && flightTimes[target.targetId]) {
+        target.flightTime = flightTimes[target.targetId]; // Assegna il flightTime
+      } else {
+        target.flightTime = 0; // Se non esiste, imposta flightTime a 0
+      }
+    });
+  }
+
+  getKeys(obj: object): string[] {
+    return Object.keys(obj);
+  }
+
+  getObjectKeys(obj: { [key: string]: any }): string[] {
+    return Object.keys(obj);
+  }
+
+  getTargets(): Observable<any> {
+    return this.http.get<any>(this.apiUrlSbeconf);
+  }
 
   getlastIndex(): number {
     const lastItem = this.me1Data[this.me1Data.length - 1];
@@ -168,25 +276,84 @@ export class FoldersComponent implements OnInit {
     }
   }
 
-  extractTargetsFromJSON(targets: any[]): { targetname: string; lat: number; lon: number }[] {
-    let extracted: { targetname: string; lat: number; lon: number }[] = [];
-    if (!Array.isArray(targets)) return extracted;
 
-    targets.forEach((target: any) => {
-      const targetname: string = target["@targetname"] || "Senza nome";
-      if (target.vertexes && Array.isArray(target.vertexes)) {
-        target.vertexes.forEach((vertex: any) => {
-          if (vertex.wgs84_coord) {
-            const lat = parseFloat(vertex.wgs84_coord["@lat"]);
-            const lon = parseFloat(vertex.wgs84_coord["@lon"]);
-            if (!isNaN(lat) && !isNaN(lon)) {
-              extracted.push({ targetname, lat, lon });
-            }
-          }
+  extractTargetsFromJSON(targets: any[]): { targetname: string; lat: number; lon: number; targetId: string; flightTime: number }[] {
+    const uniqueTargets = new Map<string, { targetname: string; lat: number; lon: number; targetId: string; flightTime: number }>();
+
+    targets.forEach((target, index) => {
+      const targetId = target.targetid || `target-${index}`; // Usa targetid se esiste, altrimenti genera un ID univoco
+      const flightTime = this.flightTimes[targetId] || 0; // Usa targetId corretto per cercare il tempo di volo
+
+      // Se il target non è già presente nella mappa con il suo targetId, lo aggiunge
+      if (!uniqueTargets.has(targetId)) {
+        uniqueTargets.set(targetId, {
+          targetname: target.targetname,
+          lat: target.lat,
+          lon: target.lon,
+          targetId: targetId,
+          flightTime: flightTime
         });
       }
     });
-    return extracted;
+
+    const targetsWithFlightTimes = Array.from(uniqueTargets.values());
+    return targetsWithFlightTimes;
+  }
+
+
+  // Funzione che calcola la distanza tra due punti usando la formula di Haversine
+  haversineTargetDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Raggio della Terra in metri
+    const φ1 = lat1 * Math.PI / 180; // Latitudine 1 in radianti
+    const φ2 = lat2 * Math.PI / 180; // Latitudine 2 in radianti
+    const Δφ = (lat2 - lat1) * Math.PI / 180; // Differenza in latitudine
+    const Δλ = (lon2 - lon1) * Math.PI / 180; // Differenza in longitudine
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distanza in metri
+  }
+
+  // Funzione che calcola la distanza tra ogni target per gruppo e la distanza totale per ciascun gruppo
+  calculateTargetDistances(): void {
+    const groupedTargets = this.groupTargetsByName();
+
+    // Per ogni gruppo calcoliamo la distanza tra i target consecutivi
+    Object.keys(groupedTargets).forEach(group => {
+      const targetsInGroup = groupedTargets[group];
+      let totalDistance = 0;
+      const distances = [];
+
+      for (let i = 1; i < targetsInGroup.length; i++) {
+        const target1 = targetsInGroup[i - 1];
+        const target2 = targetsInGroup[i];
+
+        const distance = this.haversineTargetDistance(target1.lat, target1.lon, target2.lat, target2.lon);
+        const distanceInKm = distance / 1000; // Distanza in chilometri
+        distances.push(distanceInKm); // Aggiungi la distanza dell'intervallo
+        totalDistance += distanceInKm; // Aggiungi alla distanza totale
+      }
+
+      // Salva le distanze e la distanza totale per ciascun gruppo
+      this.targetDistances[group] = distances;
+      this.totalDistancesPerGroup[group] = totalDistance;
+    });
+  }
+
+  // Funzione che raggruppa i target per nome
+  groupTargetsByName(): any {
+    return this.targets.reduce((groups, target) => {
+      const { targetname } = target;
+      if (!groups[targetname]) {
+        groups[targetname] = [];
+      }
+      groups[targetname].push(target);
+      return groups;
+    }, {});
   }
 
   getTrolleysFolders(): Observable<any> {
@@ -205,14 +372,89 @@ export class FoldersComponent implements OnInit {
     return this.http.get<any>(this.apiUrlNavData, { params: { path: 'Volo20250210-IT-PIE06/Mission/BIU/02101335.nav' } });
   }
 
-  extractTimestamps(logArray: string[]): void {
-    this.takeoffTimestamps = logArray.filter(line => line.includes("INFO: TAKEOFF DETECTED"))
+  extractTimestamps(logArray: string[] | undefined): void {
+    if (!logArray || !Array.isArray(logArray)) {
+      console.error('logArray non è definito o non è un array:', logArray);
+      return;
+    }
+
+
+    // Estrae i timestamp di decollo e atterraggio
+    this.takeoffTimestamps = logArray
+      .filter(line => line.includes("INFO: TAKEOFF DETECTED"))
       .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
-    this.landingTimestamps = logArray.filter(line => line.includes("INFO: LANDING DETECTED"))
+
+    this.landingTimestamps = logArray
+      .filter(line => line.includes("INFO: LANDING DETECTED"))
       .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
 
     // Somma delle differenze (in secondi, puoi cambiare unità come desideri)
     this.totalDurationInSeconds = this.calculateTotalDurationInSeconds();
+
+    // Inizializza l'oggetto per memorizzare i timestamp per target
+    this.timestamps = {};
+
+    // Estrae tutti i timestamp IN e OUT
+    logArray.forEach(line => {
+      const match = line.match(/^(\d+) - INFO: (IN|OUT) TARGET (\d+) \(\d+\) \(DSA\)/);
+      if (match) {
+        const timestamp = match[1]; // Timestamp
+        const type = match[2] as keyof { IN: string[]; OUT: string[] }; // IN o OUT
+        const targetId = match[3] as string; // ID del target (forza il tipo a string)
+
+        // Se il target non esiste ancora, inizializzalo
+        if (!this.timestamps[targetId]) {
+          this.timestamps[targetId] = {
+            IN: [],
+            OUT: []
+          };
+        }
+
+        // Aggiungi il timestamp all'array corrispondente
+        this.timestamps[targetId][type].push(new Date(parseInt(timestamp) * 1000).toLocaleString());
+      }
+    });
+
+    console.log('Timestamps estratti:', this.timestamps);
+
+    // Calcola il tempo di volo per ogni target
+    this.flightTimes = this.calculateFlightTime();
+    console.log('Tempi di volo:', this.flightTimes)
+
+
+  }
+
+
+  getTimestampKeys(): string[] {
+    return Object.keys(this.timestamps);
+  }
+
+  calculateFlightTime(): { [key: string]: number } {
+    const flightTimes: { [key: string]: number } = {};
+
+    // Calcola il tempo di volo per ogni target
+    for (const targetId of Object.keys(this.timestamps)) {
+      const target = this.timestamps[targetId];
+      let totalFlightTime = 0;
+
+      // Trova il numero minimo di coppie IN e OUT
+      const numPairs = Math.min(target.IN.length, target.OUT.length);
+
+      // Calcola il tempo di volo per ogni coppia
+      for (let i = 0; i < numPairs; i++) {
+        const inTime = new Date(target.IN[i]).getTime(); // Timestamp IN
+        const outTime = new Date(target.OUT[i]).getTime(); // Timestamp OUT
+
+        // Calcola la differenza in secondi
+        const flightTime = (outTime - inTime) / 1000; // Converti da millisecondi a secondi
+        totalFlightTime += flightTime;
+      }
+
+      // Associa il tempo totale di volo con l'ID del target
+      flightTimes[targetId] = totalFlightTime;
+    }
+
+    return flightTimes;
   }
 
   calculateTotalDurationInSeconds(): number {
@@ -232,6 +474,15 @@ export class FoldersComponent implements OnInit {
     }
 
     return totalDuration;
+  }
+
+  formatTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600); // Calcola le ore
+    const minutes = Math.floor((seconds % 3600) / 60); // Calcola i minuti
+    const secs = Math.floor(seconds % 60); // Calcola i secondi
+
+    // Formatta il tempo come HH:MM:SS
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
 
   // Funzione per convertire i secondi in formato ore:minuti:secondi
@@ -263,9 +514,48 @@ export class FoldersComponent implements OnInit {
       }
       return null;
     }).filter(item => item !== null);
-    this.initMap();
 
+    // Calcola la lunghezza del tracciato in chilometri
+    let totalDistance = 0;
+    for (let i = 0; i < this.flightPath.length - 1; i++) {
+      const point1 = this.flightPath[i];
+      const point2 = this.flightPath[i + 1];
+      totalDistance += this.haversineDistance(point1.lat, point1.lon, point2.lat, point2.lon);
+    }
+
+    // Convertiamo la distanza da metri a chilometri
+    this.totalDistance = totalDistance / 1000;  // Assegna il risultato alla proprietà totalDistance
+
+    console.log('Lunghezza totale del tracciato di volo (in chilometri):', this.totalDistance);
+
+    this.initMap();
   }
+
+  haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Raggio della Terra in metri
+    const φ1 = lat1 * Math.PI / 180; // Latitudine 1 in radianti
+    const φ2 = lat2 * Math.PI / 180; // Latitudine 2 in radianti
+    const Δφ = (lat2 - lat1) * Math.PI / 180; // Differenza in latitudine
+    const Δλ = (lon2 - lon1) * Math.PI / 180; // Differenza in longitudine
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distanza in metri
+  }
+
+  // Calcola la distanza totale per un target
+  calculateTotalDistance(targetName: string): number {
+    if (!this.targetDistances || !this.targetDistances[targetName] || this.targetDistances[targetName].length === 0) {
+      console.error(`Nessuna distanza trovata per il target: ${targetName}`);
+      return 0;
+    }
+    return this.targetDistances[targetName].reduce((sum, distance) => sum + distance, 0);
+  }
+
 
   initMap(): void {
     if ((!this.targets || this.targets.length === 0) && (!this.flightPath || this.flightPath.length === 0)) {
@@ -309,7 +599,7 @@ export class FoldersComponent implements OnInit {
         .filter(coord => coord.length === 2 && coord.every(val => !isNaN(val)))  // Verifica che ci siano esattamente 2 valori numerici
       : [];
 
-    this.uniqueTargets = this.getUniqueTargets();
+    this.uniqueTargets = this.getUniqueTargets(this.targets);
   }
 
   loadMe1Data(): void {
@@ -322,15 +612,16 @@ export class FoldersComponent implements OnInit {
     );
   }
 
-  getUniqueTargets() {
-    const seen = new Set();
-    return this.targets.filter(target => {
-      if (seen.has(target.targetname)) {
-        return false;
+  getUniqueTargets(targets: any[]): any[] {
+    const uniqueTargets = new Map<string, any>();
+
+    targets.forEach(target => {
+      if (!uniqueTargets.has(target.targetname)) {
+        uniqueTargets.set(target.targetname, target);
       }
-      seen.add(target.targetname);
-      return true;
     });
+
+    return Array.from(uniqueTargets.values());
   }
 
   updateFlightPath(): void {
