@@ -6,12 +6,29 @@ import * as L from 'leaflet';
 import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import { ActivatedRoute, Router } from '@angular/router';
 
+interface FilteredMs1Data {
+  [key: string]: {
+    IN: number;    // Timestamp in ms
+    OUT: number;   // Timestamp in ms
+    data: any[];
+  }[];
+}
 
 interface TargetTimestamps {
   [key: string]: {
-    IN: string[];
-    OUT: string[];
+    IN: number[];
+    OUT: number[];
   };
+}
+
+interface SimpleMs1Point {
+  targetId: string;
+  lat: number;
+  lon: number;
+}
+
+interface TargetVisibility {
+  [targetId: string]: boolean;
 }
 
 @Component({
@@ -55,8 +72,12 @@ export class FoldersComponent implements OnInit {
   timestamps: TargetTimestamps = {};
   flightTimes: { [key: string]: number } = {};
   targetFlightTimes: { targetname: string; flightTime: number }[] = [];
+  logArray: string[] = [];
+  filteredMs1Points: SimpleMs1Point[] = [];
+  targetVisibility: TargetVisibility = {};
 
   private map!: L.Map;
+  private ms1PointsLayers: { [targetId: string]: L.LayerGroup } = {};
   private flightPathLayer?: L.Polyline;
   private targetsLayer: L.LayerGroup = L.layerGroup();
   private apiUrlLogArray = 'http://localhost:3000/log-array';
@@ -95,11 +116,27 @@ export class FoldersComponent implements OnInit {
         }
       );
 
-    //File MS
     this.http.get<any[]>('http://localhost:3000/api/ms1').subscribe(
       data => {
-        console.log('📥 Dati ricevuti:', data);
-        this.ms1Data = data;
+        console.log('📥 Dati ricevuti dal server:', data);
+
+        // Salva direttamente i dati senza formattare il timestamp
+        this.ms1Data = data.map(item => ({
+          timestamp: item.timestamp, // Mantiene il valore numerico
+          lat: item.lat,
+          lon: item.lon
+        }));
+
+        console.log("📊 ms1Data popolato con:", this.ms1Data);
+
+        // Chiamo extractTimestamps() PRIMA di filtrare i dati
+        this.extractTimestamps(this.logArray);
+
+        // Ora chiamo il filtro SOLO DOPO extractTimestamps
+        setTimeout(() => {
+          const filteredResults = this.filterMs1DataByFlightTimes();
+          console.log("📌 Dati filtrati per target:", JSON.stringify(filteredResults, null, 2));
+        }, 100);
       },
       error => console.error('Errore nel recupero dati:', error)
     );
@@ -394,15 +431,14 @@ export class FoldersComponent implements OnInit {
     // Inizializza l'oggetto per memorizzare i timestamp per target
     this.timestamps = {};
 
-    // Estrae tutti i timestamp IN e OUT
+
     logArray.forEach(line => {
       const match = line.match(/^(\d+) - INFO: (IN|OUT) TARGET (\d+) \(\d+\) \(DSA\)/);
       if (match) {
-        const timestamp = match[1]; // Timestamp
-        const type = match[2] as keyof { IN: string[]; OUT: string[] }; // IN o OUT
-        const targetId = match[3] as string; // ID del target (forza il tipo a string)
+        const timestamp = parseInt(match[1]) * 1000; // Conserva come numero
+        const type = match[2] as keyof { IN: number[]; OUT: number[] };
+        const targetId = match[3];
 
-        // Se il target non esiste ancora, inizializzalo
         if (!this.timestamps[targetId]) {
           this.timestamps[targetId] = {
             IN: [],
@@ -410,16 +446,13 @@ export class FoldersComponent implements OnInit {
           };
         }
 
-        // Aggiungi il timestamp all'array corrispondente
-        this.timestamps[targetId][type].push(new Date(parseInt(timestamp) * 1000).toLocaleString());
+        this.timestamps[targetId][type].push(timestamp);
       }
     });
-
     console.log('Timestamps estratti:', this.timestamps);
 
-    // Calcola il tempo di volo per ogni target
     this.flightTimes = this.calculateFlightTime();
-    console.log('Tempi di volo:', this.flightTimes)
+    console.log('Tempi di volo:', this.flightTimes);
 
 
   }
@@ -432,45 +465,41 @@ export class FoldersComponent implements OnInit {
   calculateFlightTime(): { [key: string]: number } {
     const flightTimes: { [key: string]: number } = {};
 
-    // Calcola il tempo di volo per ogni target
     for (const targetId of Object.keys(this.timestamps)) {
       const target = this.timestamps[targetId];
       let totalFlightTime = 0;
 
-      // Trova il numero minimo di coppie IN e OUT
       const numPairs = Math.min(target.IN.length, target.OUT.length);
 
-      // Calcola il tempo di volo per ogni coppia
       for (let i = 0; i < numPairs; i++) {
-        const inTime = new Date(target.IN[i]).getTime(); // Timestamp IN
-        const outTime = new Date(target.OUT[i]).getTime(); // Timestamp OUT
+        const inTime = target.IN[i]; // Già in millisecondi
+        const outTime = target.OUT[i]; // Già in millisecondi
 
-        // Calcola la differenza in secondi
-        const flightTime = (outTime - inTime) / 1000; // Converti da millisecondi a secondi
-        totalFlightTime += flightTime;
+        // Assicurati che siano numeri
+        if (typeof inTime === 'number' && typeof outTime === 'number') {
+          const flightTime = (outTime - inTime) / 1000;
+          totalFlightTime += flightTime;
+        }
       }
 
-      // Associa il tempo totale di volo con l'ID del target
       flightTimes[targetId] = totalFlightTime;
     }
 
     return flightTimes;
   }
 
+  // 4. Modifica calculateTotalDurationInSeconds()
   calculateTotalDurationInSeconds(): number {
     let totalDuration = 0;
 
-    // Assumiamo che i timestamp di atterraggio e decollo siano sincronizzati
     for (let i = 0; i < Math.min(this.takeoffTimestamps.length, this.landingTimestamps.length); i++) {
-      const takeoff = new Date(this.takeoffTimestamps[i]);
-      const landing = new Date(this.landingTimestamps[i]);
+      const takeoff = this.takeoffTimestamps[i];
+      const landing = this.landingTimestamps[i];
 
-      // Calcola la differenza in millisecondi e poi convertila in secondi
-      const durationInMilliseconds = landing.getTime() - takeoff.getTime();
-      const durationInSeconds = durationInMilliseconds / 1000;
-
-      // Aggiungi la durata alla somma totale
-      totalDuration += durationInSeconds;
+      // Verifica che siano numeri
+      if (typeof takeoff === 'number' && typeof landing === 'number') {
+        totalDuration += (landing - takeoff) / 1000;
+      }
     }
 
     return totalDuration;
@@ -556,6 +585,143 @@ export class FoldersComponent implements OnInit {
     return this.targetDistances[targetName].reduce((sum, distance) => sum + distance, 0);
   }
 
+  // Funzione che filtra i dati di ms1Data usando timestamp numerici
+  filterMs1DataByFlightTimes(): { [key: string]: { IN: number; OUT: number; data: any[] }[] } {
+    const filteredData: { [key: string]: { IN: number; OUT: number; data: any[] }[] } = {};
+    this.filteredMs1Points = []; // Resetta l'array prima di riempirlo
+
+    // Verifica che this.timestamps esista
+    if (!this.timestamps) {
+      console.error('Timestamps non disponibili');
+      return filteredData;
+    }
+
+    // Inizializza layers e visibilità per ogni target
+    Object.keys(this.timestamps).forEach(targetId => {
+      // Inizializza il layer se non esiste
+      if (!this.ms1PointsLayers[targetId]) {
+        this.ms1PointsLayers[targetId] = L.layerGroup().addTo(this.map);
+      }
+
+      // Inizializza la visibilità se non esiste
+      if (this.targetVisibility[targetId] === undefined) {
+        this.targetVisibility[targetId] = false;
+      }
+
+      filteredData[targetId] = [];
+      const target = this.timestamps[targetId];
+      const numPairs = Math.min(target.IN.length, target.OUT.length);
+
+      for (let i = 0; i < numPairs; i++) {
+        const inTime = target.IN[i];
+        const outTime = target.OUT[i];
+
+        if (typeof inTime === 'number' && !isNaN(inTime) &&
+          typeof outTime === 'number' && !isNaN(outTime)) {
+
+          const ms1Filtered = this.ms1Data.filter(entry => {
+            const entryTime = entry.timestamp;
+            return typeof entryTime === 'number' &&
+              !isNaN(entryTime) &&
+              entryTime >= inTime &&
+              entryTime <= outTime;
+          });
+
+          // Aggiungi i punti filtrati alla nuova variabile
+          ms1Filtered.forEach(point => {
+            this.filteredMs1Points.push({
+              targetId: targetId,
+              lat: point.lat,
+              lon: point.lon
+            });
+          });
+
+          filteredData[targetId].push({
+            IN: inTime,
+            OUT: outTime,
+            data: ms1Filtered
+          });
+        }
+      }
+    });
+
+    console.log('Punti MS1 filtrati semplificati:', this.filteredMs1Points);
+
+    // Assicura che tutti i target abbiano uno stato di visibilità
+    Object.keys(filteredData).forEach(targetId => {
+      if (!this.targetVisibility.hasOwnProperty(targetId)) {
+        this.targetVisibility[targetId] = false;
+      }
+    });
+
+    // Forza l'aggiornamento della mappa nel prossimo ciclo di eventi
+    setTimeout(() => {
+      this.updateFilteredMs1Visibility();
+      console.log('Mappa aggiornata con punti filtrati');
+    }, 0);
+
+    return filteredData;
+  }
+
+  updateFilteredMs1Visibility(): void {
+    if (!this.map) {
+      console.error('Mappa non inizializzata');
+      return;
+    }
+
+    // Pulisci tutti i layer esistenti
+    Object.values(this.ms1PointsLayers).forEach(layer => {
+      if (layer) layer.clearLayers();
+    });
+
+    // Verifica dati e mappa
+    if (!this.filteredMs1Points || this.filteredMs1Points.length === 0) {
+      console.log('Nessun punto MS1 filtrato da visualizzare');
+      return;
+    }
+
+    // Raggruppa per targetId
+    const pointsByTarget = this.filteredMs1Points.reduce((acc, point) => {
+      if (!acc[point.targetId]) acc[point.targetId] = [];
+      acc[point.targetId].push(point);
+      return acc;
+    }, {} as { [key: string]: SimpleMs1Point[] });
+
+    // Aggiungi i punti ai layer
+    Object.keys(pointsByTarget).forEach(targetId => {
+      if (this.targetVisibility[targetId] && this.ms1PointsLayers[targetId]) {
+        pointsByTarget[targetId].forEach(point => {
+          L.circleMarker([point.lat, point.lon], {
+            radius: 5,
+            fillColor: this.getColorForTarget(targetId),
+            color: 'dark' + this.getColorForTarget(targetId),
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+          }).addTo(this.ms1PointsLayers[targetId])
+            .bindPopup(`Target: ${targetId}<br>Lat: ${point.lat.toFixed(6)}<br>Lon: ${point.lon.toFixed(6)}`);
+        });
+      }
+    });
+
+    console.log('Punti MS1 aggiornati sulla mappa');
+  }
+
+  // Metodo helper per colori diversi
+  getColorForTarget(targetId: string): string {
+    const colors = ['orange', 'blue', 'green', 'red', 'purple', 'yellow'];
+    const idNumber = parseInt(targetId.replace(/\D/g, '')) || 0; // Estrai numeri dall'ID
+    return colors[idNumber % colors.length];
+  }
+
+  getTargetIds(): string[] {
+    return Object.keys(this.timestamps || {});
+  }
+
+  countPointsForTarget(targetId: string): number {
+    if (!this.filteredMs1Points) return 0;
+    return this.filteredMs1Points.filter(p => p.targetId === targetId).length;
+  }
 
   initMap(): void {
     if ((!this.targets || this.targets.length === 0) && (!this.flightPath || this.flightPath.length === 0)) {
@@ -578,6 +744,10 @@ export class FoldersComponent implements OnInit {
 
     // Aggiunta del tracciato di volo
     this.updateFlightPath();
+    Object.keys(this.timestamps).forEach(targetId => {
+      this.ms1PointsLayers[targetId] = L.layerGroup().addTo(this.map);
+      this.targetVisibility[targetId] = false;  // Default: nascosto
+    });
 
     if (this.targets && this.targets.length > 0) {
       this.targetsLayer = L.layerGroup().addTo(this.map);
@@ -682,6 +852,11 @@ export class FoldersComponent implements OnInit {
     this.updateFlightPath();
   }
 
+  toggleTargetMsVisibility(targetId: string): void {
+    this.targetVisibility[targetId] = !this.targetVisibility[targetId];
+    this.updateFilteredMs1Visibility();
+  }
+
   updateMs1Visibility(): void {
     if (!this.ms1Data || this.ms1Data.length === 0) return; // Verifica che i dati siano disponibili
 
@@ -710,7 +885,6 @@ export class FoldersComponent implements OnInit {
         .bindPopup(`Target: ${point.targetname}`); // Mostra info al click
     });
   }
-
 
   toggleMs1Polygons(): void {
     this.showMs1 = !this.showMs1;
