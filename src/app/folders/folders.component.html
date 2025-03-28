@@ -112,12 +112,6 @@
                 </label>
             </div>
 
-            <div class="strobe">
-                <label>
-                    <input type="checkbox" (change)=" toggleMs1Polygons()">
-                    Mostra Strobe
-                </label>
-            </div>
 
             <div *ngIf="filteredMs1Points.length > 0">
                 <h3>Punti MS1 Filtrati</h3>
@@ -125,7 +119,7 @@
                     <label>
                         <input type="checkbox" [checked]="targetVisibility[targetId]"
                             (change)="toggleTargetMsVisibility(targetId)">
-                        Target {{targetId}} ({{countPointsForTarget(targetId)}} punti)
+                        Target {{targetId}} ({{countPointsForTarget(targetId)}} strobe)
                     </label>
                 </div>
             </div>

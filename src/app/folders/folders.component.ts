@@ -63,11 +63,11 @@ export class FoldersComponent implements OnInit {
   totalDurationInSeconds: number = 0;
   totalDistance: number = 0;
   targetsData: any[] = [];
-  totalDistancesPerGroup: { [key: string]: number } = {};  // Usa un oggetto con chiavi stringa
+  totalDistancesPerGroup: { [key: string]: number } = {};
   targetDistances: { [key: string]: number[] } = {};
   flightStartTime: number = 0; // Timestamp di inizio volo 
   flightEndTime: number = 0;   // Timestamp di fine volo 
-  entryTimestamp: number = 0;  // Quando il drone entra nel target
+  entryTimestamp: number = 0;
   exitTimestamp: number = 0;
   timestamps: TargetTimestamps = {};
   flightTimes: { [key: string]: number } = {};
@@ -75,6 +75,9 @@ export class FoldersComponent implements OnInit {
   logArray: string[] = [];
   filteredMs1Points: SimpleMs1Point[] = [];
   targetVisibility: TargetVisibility = {};
+  takeoffTimestampsNumeric: number[] = [];
+  landingTimestampsNumeric: number[] = [];
+
 
   private map!: L.Map;
   private ms1PointsLayers: { [targetId: string]: L.LayerGroup } = {};
@@ -416,16 +419,23 @@ export class FoldersComponent implements OnInit {
     }
 
 
-    // Estrae i timestamp di decollo e atterraggio
-    this.takeoffTimestamps = logArray
+    // Conserva i timestamp come numeri (millisecondi)
+    this.takeoffTimestampsNumeric = logArray
       .filter(line => line.includes("INFO: TAKEOFF DETECTED"))
-      .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
+      .map(line => parseInt(line.split(' - ')[0].trim()) * 1000);
 
-    this.landingTimestamps = logArray
+    this.landingTimestampsNumeric = logArray
       .filter(line => line.includes("INFO: LANDING DETECTED"))
-      .map(line => new Date(parseInt(line.split(' - ')[0].trim()) * 1000).toLocaleString());
+      .map(line => parseInt(line.split(' - ')[0].trim()) * 1000);
 
-    // Somma delle differenze (in secondi, puoi cambiare unità come desideri)
+    // Converti in stringhe solo per visualizzazione
+    this.takeoffTimestamps = this.takeoffTimestampsNumeric
+      .map(ts => new Date(ts).toLocaleString());
+
+    this.landingTimestamps = this.landingTimestampsNumeric
+      .map(ts => new Date(ts).toLocaleString());
+
+    // Calcola la durata usando i valori numerici
     this.totalDurationInSeconds = this.calculateTotalDurationInSeconds();
 
     // Inizializza l'oggetto per memorizzare i timestamp per target
@@ -492,14 +502,13 @@ export class FoldersComponent implements OnInit {
   calculateTotalDurationInSeconds(): number {
     let totalDuration = 0;
 
-    for (let i = 0; i < Math.min(this.takeoffTimestamps.length, this.landingTimestamps.length); i++) {
-      const takeoff = this.takeoffTimestamps[i];
-      const landing = this.landingTimestamps[i];
-
-      // Verifica che siano numeri
-      if (typeof takeoff === 'number' && typeof landing === 'number') {
-        totalDuration += (landing - takeoff) / 1000;
-      }
+    // Usa gli array numerici per il calcolo
+    for (let i = 0; i < Math.min(
+      this.takeoffTimestampsNumeric.length,
+      this.landingTimestampsNumeric.length
+    ); i++) {
+      const durationMs = this.landingTimestampsNumeric[i] - this.takeoffTimestampsNumeric[i];
+      totalDuration += durationMs / 1000; // Converti in secondi
     }
 
     return totalDuration;
@@ -520,12 +529,10 @@ export class FoldersComponent implements OnInit {
     const minutes = Math.floor((seconds % 3600) / 60);
     const sec = seconds % 60;
 
-    // Restituisce la stringa formattata in HH:MM:SS
     return `${this.padZero(hours)}:${this.padZero(minutes)}:${this.padZero(sec)}`;
   }
 
-  // Funzione di supporto per aggiungere uno zero davanti ai numeri singoli
-  padZero(num: number): string {
+  private padZero(num: number): string {
     return num < 10 ? `0${num}` : `${num}`;
   }
 
@@ -588,22 +595,29 @@ export class FoldersComponent implements OnInit {
   // Funzione che filtra i dati di ms1Data usando timestamp numerici
   filterMs1DataByFlightTimes(): { [key: string]: { IN: number; OUT: number; data: any[] }[] } {
     const filteredData: { [key: string]: { IN: number; OUT: number; data: any[] }[] } = {};
-    this.filteredMs1Points = []; // Resetta l'array prima di riempirlo
+    this.filteredMs1Points = [];
 
-    // Verifica che this.timestamps esista
     if (!this.timestamps) {
       console.error('Timestamps non disponibili');
       return filteredData;
     }
 
-    // Inizializza layers e visibilità per ogni target
+    // Verifica che la mappa esista
+    if (!this.map) {
+      console.error('Mappa non inizializzata');
+      return filteredData;
+    }
+
     Object.keys(this.timestamps).forEach(targetId => {
-      // Inizializza il layer se non esiste
+      // Inizializza il layer solo se non esiste
       if (!this.ms1PointsLayers[targetId]) {
-        this.ms1PointsLayers[targetId] = L.layerGroup().addTo(this.map);
+        this.ms1PointsLayers[targetId] = L.layerGroup();
+        // Aggiungi il layer alla mappa solo se esiste
+        if (this.map) {
+          this.ms1PointsLayers[targetId].addTo(this.map);
+        }
       }
 
-      // Inizializza la visibilità se non esiste
       if (this.targetVisibility[targetId] === undefined) {
         this.targetVisibility[targetId] = false;
       }
@@ -671,7 +685,9 @@ export class FoldersComponent implements OnInit {
 
     // Pulisci tutti i layer esistenti
     Object.values(this.ms1PointsLayers).forEach(layer => {
-      if (layer) layer.clearLayers();
+      if (layer && this.map.hasLayer(layer)) {
+        layer.clearLayers();
+      }
     });
 
     // Verifica dati e mappa
@@ -755,20 +771,6 @@ export class FoldersComponent implements OnInit {
     }
 
     this.map.fitBounds([...this.flightPath.map(p => [p.lat, p.lon] as [number, number])]);
-
-    // Aggiusta la mappa per includere sia il volo che i target
-    const flightCoordinates: [number, number][] = this.flightPath && this.flightPath.length > 0
-      ? this.flightPath
-        .map(point => [point.lat, point.lon] as [number, number])  // Forza il tipo [number, number]
-        .filter(coord => coord.length === 2 && coord.every(val => !isNaN(val)))  // Verifica che ci siano esattamente 2 valori numerici
-      : [];
-
-    const targetCoordinates: [number, number][] = this.targets && this.targets.length > 0
-      ? this.targets
-        .map(t => [t.lat, t.lon] as [number, number])  // Forza il tipo [number, number]
-        .filter(coord => coord.length === 2 && coord.every(val => !isNaN(val)))  // Verifica che ci siano esattamente 2 valori numerici
-      : [];
-
     this.uniqueTargets = this.getUniqueTargets(this.targets);
   }
 
@@ -857,59 +859,8 @@ export class FoldersComponent implements OnInit {
     this.updateFilteredMs1Visibility();
   }
 
-  updateMs1Visibility(): void {
-    if (!this.ms1Data || this.ms1Data.length === 0) return; // Verifica che i dati siano disponibili
 
-    // Se targetsLayer è undefined, inizializzalo
-    if (!this.targetsLayer) {
-      this.targetsLayer = L.layerGroup();  // Inizializza targetsLayer se è undefined
-      this.targetsLayer.addTo(this.map);    // Aggiungi targetsLayer alla mappa
-    }
 
-    this.targetsLayer.clearLayers(); // Rimuove i marker esistenti
 
-    // Personalizza il punto (marker) per i dati MS1
-    const ms1MarkerOptions = {
-      radius: 2, // Imposta il raggio del cerchio
-      ffillColor: '#8A2BE2', // Colore di riempimento (viola)
-      color: '#4B0082', // Colore del bordo (viola scuro)
-      weight: 1, // Spessore del bordo
-      opacity: 1, // Opacità
-      fillOpacity: 0.6 // Opacità del riempimento
-    };
-
-    this.ms1Data.forEach(point => {
-      // Aggiungi un cerchio per ogni punto ms1Data
-      L.circleMarker([point.lat, point.lon], ms1MarkerOptions)
-        .addTo(this.targetsLayer)
-        .bindPopup(`Target: ${point.targetname}`); // Mostra info al click
-    });
-  }
-
-  toggleMs1Polygons(): void {
-    this.showMs1 = !this.showMs1;
-
-    if (!this.targetsLayer) {
-      console.warn('targetsLayer non è inizializzato!');
-      return;
-    }
-
-    if (this.showMs1) {
-      this.updateMs1Visibility();
-    } else {
-      this.targetsLayer.clearLayers(); // Rimuove i poligoni se disattivato
-    }
-  }
-
-  toggleMs1(): void {
-    this.showMs1 = !this.showMs1;
-
-    if (!this.targetsLayer) {
-      console.warn('targetsLayer non è inizializzato!');
-      return;
-    }
-
-    this.updateMs1Visibility();
-  }
 
 }
