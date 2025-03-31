@@ -5,6 +5,7 @@ import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
 import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import { ActivatedRoute, Router } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 
 interface FilteredMs1Data {
   [key: string]: {
@@ -31,10 +32,25 @@ interface TargetVisibility {
   [targetId: string]: boolean;
 }
 
+interface Waypoint {
+  WPid: string;
+  nextWPid: string;
+  lat: number | null;
+  lon: number | null;
+  alt_asl: number | null;
+}
+
+interface Task {
+  taskId: string;
+  taskName: string;
+  waypoints: Waypoint[];
+  totalLegs: number;
+}
+
 @Component({
   selector: 'app-folders',
   standalone: true,
-  imports: [CommonModule, LeafletModule],
+  imports: [CommonModule, LeafletModule, FormsModule],
   templateUrl: './folders.component.html',
   styleUrls: ['./folders.component.css']
 })
@@ -77,8 +93,15 @@ export class FoldersComponent implements OnInit {
   targetVisibility: TargetVisibility = {};
   takeoffTimestampsNumeric: number[] = [];
   landingTimestampsNumeric: number[] = [];
+  tasks: Task[] = [];
+  showTasks: boolean = true;
+  tasksLayer: L.LayerGroup = L.layerGroup();
+  totalLegs: number = 0;
 
 
+  private isMapReady(): boolean {
+    return !!this.map && typeof this.map.addLayer === 'function' && (this.map as any)._loaded;
+  }
   private map!: L.Map;
   private ms1PointsLayers: { [targetId: string]: L.LayerGroup } = {};
   private flightPathLayer?: L.Polyline;
@@ -144,18 +167,35 @@ export class FoldersComponent implements OnInit {
       error => console.error('Errore nel recupero dati:', error)
     );
 
-    this.http.get<any[]>(this.apiUrlSbeconf).subscribe(
+    this.http.get<any>(this.apiUrlSbeconf).subscribe(
       data => {
-        console.log('Dati ricevuti da sbeconf:', data);  // Verifica la struttura dei dati
-        this.targets = data; // Salviamo i dati dei target
+        console.log('📥 Dati ricevuti da sbeconf:', data);
 
-        // Assicurati che i dati contengano il campo targetId
-        this.extractTargetsFromJSON(this.targets);
+        // Estrarre solo l'array `targets`
+        if (!data || !Array.isArray(data.targets)) {
+          console.error('❌ Errore: "targets" non è un array!', data.targets);
+          return;
+        }
 
-        this.calculateTargetDistances(); // Calcoliamo le distanze
+        this.targets = this.extractTargetsFromJSON(data.targets); // Passa SOLO `data.targets`
+        this.tasks = data.tasks || []; // Se `tasks` è undefined, assegna un array vuoto
+
+        console.log('✅ Targets estratti:', this.targets);
+        console.log('✅ Tasks:', this.tasks);
+
+        // Continua con la logica
+        const targetGroups = this.groupTargetsByName();
+        this.assignTargetIdsToGroups(targetGroups);
+        this.assignFlightTimes(this.targets, this.flightTimes);
+        this.uniqueTargets = this.getUniqueTargets(this.targets);
+        this.uniqueTargets.forEach(target => {
+          target.totalDistance = this.calculateTotalDistanceForTarget(target.targetname);
+        });
+
+        console.log('🎯 Targets unici:', this.uniqueTargets);
       },
       error => {
-        console.error('Errore nella chiamata a sbeconf:', error);
+        console.error('❌ Errore nella chiamata a sbeconf:', error);
       }
     );
 
@@ -184,41 +224,44 @@ export class FoldersComponent implements OnInit {
 
     this.loadTrolleysFolders();
 
-    this.http.get<any[]>(this.apiUrlSbeconf).subscribe(
+    // Chiamata HTTP per ottenere i dati dal backend
+    this.http.get<any>(this.apiUrlSbeconf).subscribe(
       data => {
-        console.log('Dati ricevuti da sbeconf:', data);
-        this.targets = data; // Salva i dati dei target
+        console.log('📥 Dati ricevuti da sbeconf:', data); // Log dei dati ricevuti
+        console.log('Dati tasks:', data?.tasks);
 
-        // Raggruppa i target per targetname
+        if (!data || !Array.isArray(data.targets)) {
+          console.error('❌ Errore: "targets" non è un array', data.targets);
+          return;
+        }
+
+        if (!data || !Array.isArray(data.tasks)) {
+          console.error('❌ Errore: "tasks" non è un array', data.tasks);
+          return;
+        }
+
+        this.targets = data.targets;
+        this.tasks = data.tasks || []; // Se tasks è undefined, assegna un array vuoto
+
+        console.log('✅ Targets:', this.targets);
+        console.log('✅ Tasks:', this.tasks);
+
+        // Continua con la logica esistente
         const targetGroups = this.groupTargetsByName();
-
-        // Assegna targetId univoci ai gruppi
         this.assignTargetIdsToGroups(targetGroups);
-
-        // Assegna i flightTime ai target
         this.assignFlightTimes(this.targets, this.flightTimes);
-
-        // Filtra i target per targetname unici
         this.uniqueTargets = this.getUniqueTargets(this.targets);
-
-        // Calcola la lunghezza totale per ogni target unico
+        console.log('✅ Unique Targets:', this.uniqueTargets);
         this.uniqueTargets.forEach(target => {
           target.totalDistance = this.calculateTotalDistanceForTarget(target.targetname);
         });
 
-        console.log('Targets unici con tempi di volo e lunghezza totale:', this.uniqueTargets);
-
-        // Calcola i flightTimes (supponiamo che questo metodo sia già implementato)
-        this.flightTimes = this.calculateFlightTime();
-
-        // Associa i flightTime ai target
-        this.assignFlightTimesToTargets(this.targets, this.flightTimes);
-
-        console.log('Targets con tempi di volo:', this.targets); // Verifica qui
+        console.log('🎯 Targets unici:', this.uniqueTargets);
       },
       error => {
-        console.error('Errore nella chiamata a sbeconf:', error);
+        console.error('❌ Errore nella chiamata a sbeconf:', error);
       }
+
     );
 
   }
@@ -248,11 +291,15 @@ export class FoldersComponent implements OnInit {
   }
 
   formatFlightTime(seconds: number): string {
-    const hours = Math.floor(seconds / 3600); // Calcola le ore
-    const minutes = Math.floor((seconds % 3600) / 60); // Calcola i minuti
-    const secs = seconds % 60; // Calcola i secondi
+    // Controllo se il valore non è un numero valido
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return "00:00:00";
+    }
 
-    // Formatta il tempo come HH:MM
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
   assignTargetIdsToGroups(targetGroups: { [key: string]: any[] }): void {
@@ -317,29 +364,90 @@ export class FoldersComponent implements OnInit {
   }
 
 
+  // Funzione per estrarre i targets in modo unico
   extractTargetsFromJSON(targets: any[]): { targetname: string; lat: number; lon: number; targetId: string; flightTime: number }[] {
+    console.log('🔍 targets ricevuti:', targets);
+
+    // Verifica che i targets siano un array valido
+    if (!Array.isArray(targets)) {
+      console.error('❌ Errore: targets non è un array!', targets);
+      return [];
+    }
+
+    // Usa una mappa per ottenere targets unici
     const uniqueTargets = new Map<string, { targetname: string; lat: number; lon: number; targetId: string; flightTime: number }>();
 
     targets.forEach((target, index) => {
-      const targetId = target.targetid || `target-${index}`; // Usa targetid se esiste, altrimenti genera un ID univoco
-      const flightTime = this.flightTimes[targetId] || 0; // Usa targetId corretto per cercare il tempo di volo
+      if (!target || typeof target !== 'object') {
+        console.error('⚠️ Target non valido:', target);
+        return;
+      }
 
-      // Se il target non è già presente nella mappa con il suo targetId, lo aggiunge
+      // Assegna un ID unico per ogni target
+      const targetId = target.targetid || `target-${index}`;
+      const flightTime = this.flightTimes[targetId] || 0;
+
+      // Se il target non è già presente nella mappa, aggiungilo
       if (!uniqueTargets.has(targetId)) {
         uniqueTargets.set(targetId, {
-          targetname: target.targetname,
-          lat: target.lat,
-          lon: target.lon,
+          targetname: target.targetname || "Sconosciuto",
+          lat: target.lat ?? 0, // Usa 0 se non è definito
+          lon: target.lon ?? 0,
           targetId: targetId,
           flightTime: flightTime
         });
       }
     });
 
-    const targetsWithFlightTimes = Array.from(uniqueTargets.values());
-    return targetsWithFlightTimes;
+    // Restituisci un array con i valori unici
+    console.log('✅ Targets estratti:', Array.from(uniqueTargets.values()));
+    return Array.from(uniqueTargets.values());
   }
 
+  // Funzione per estrarre i tasks dal file sbeconf.jsn
+  extractTasksFromJSON(tasks: any[]): { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number }[] {
+    console.log('🔍 tasks ricevuti:', tasks);
+
+    if (!Array.isArray(tasks)) {
+      console.error('❌ Errore: tasks non è un array!', tasks);
+      return [];
+    }
+
+    const extractedTasks = tasks.map(task => {
+      const taskId = task["@taskid"] || "Sconosciuto";
+      const taskName = task["@taskname"] || "Sconosciuto";
+
+      // Estrazione dei waypoint validi
+      const waypoints: Waypoint[] = task.waypoint?.map((wp: any) => ({
+        WPid: wp["@WPid"] || "Sconosciuto",
+        nextWPid: wp["@nextWPid"] || "Sconosciuto",
+        lat: wp.wgs84_coord?.["@lat"] ? parseFloat(wp.wgs84_coord["@lat"]) : null,
+        lon: wp.wgs84_coord?.["@lon"] ? parseFloat(wp.wgs84_coord["@lon"]) : null,
+        alt_asl: wp.wgs84_coord?.["@alt_asl"] ? parseFloat(wp.wgs84_coord["@alt_asl"]) : null
+      })) || [];
+
+      // Filtriamo i waypoint con lat/lon nulli
+      const validWaypoints = waypoints.filter(wp => wp.lat !== null && wp.lon !== null);
+
+      // Calcoliamo il numero di leg (tratti tra waypoint consecutivi)
+      const totalLegs = validWaypoints.length > 0 ? validWaypoints.length - 1 : 0;
+
+      console.log(`📌 Task ${taskId}: ${validWaypoints.length} waypoint(s), ${totalLegs} leg(s)`);
+
+      return {
+        taskId,
+        taskName,
+        waypoints: validWaypoints,
+        totalLegs
+      };
+    });
+
+    // Calcoliamo il totale complessivo di tutti i leg
+    this.totalLegs = extractedTasks.reduce((sum, task) => sum + task.totalLegs, 0);
+    console.log(`Totale generale: ${this.totalLegs} leg(s)`);
+
+    return extractedTasks;
+  }
 
   // Funzione che calcola la distanza tra due punti usando la formula di Haversine
   haversineTargetDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -482,17 +590,18 @@ export class FoldersComponent implements OnInit {
       const numPairs = Math.min(target.IN.length, target.OUT.length);
 
       for (let i = 0; i < numPairs; i++) {
-        const inTime = target.IN[i]; // Già in millisecondi
-        const outTime = target.OUT[i]; // Già in millisecondi
+        const inTime = target.IN[i];
+        const outTime = target.OUT[i];
 
-        // Assicurati che siano numeri
-        if (typeof inTime === 'number' && typeof outTime === 'number') {
+        if (typeof inTime === 'number' && !isNaN(inTime) &&
+          typeof outTime === 'number' && !isNaN(outTime)) {
           const flightTime = (outTime - inTime) / 1000;
           totalFlightTime += flightTime;
         }
       }
 
-      flightTimes[targetId] = totalFlightTime;
+      // Assegna 0 se non c'è un tempo di volo valido
+      flightTimes[targetId] = totalFlightTime || 0;
     }
 
     return flightTimes;
@@ -502,19 +611,32 @@ export class FoldersComponent implements OnInit {
   calculateTotalDurationInSeconds(): number {
     let totalDuration = 0;
 
-    // Usa gli array numerici per il calcolo
+    // Verifica che gli array esistano e abbiano elementi
+    if (!this.takeoffTimestampsNumeric || !this.landingTimestampsNumeric ||
+      this.takeoffTimestampsNumeric.length === 0 ||
+      this.landingTimestampsNumeric.length === 0) {
+      return 0; // Restituisce 0 invece di NaN
+    }
+
     for (let i = 0; i < Math.min(
       this.takeoffTimestampsNumeric.length,
       this.landingTimestampsNumeric.length
     ); i++) {
-      const durationMs = this.landingTimestampsNumeric[i] - this.takeoffTimestampsNumeric[i];
-      totalDuration += durationMs / 1000; // Converti in secondi
+      const takeoff = this.takeoffTimestampsNumeric[i];
+      const landing = this.landingTimestampsNumeric[i];
+
+      if (typeof takeoff === 'number' && !isNaN(takeoff) &&
+        typeof landing === 'number' && !isNaN(landing)) {
+        const durationMs = landing - takeoff;
+        totalDuration += durationMs / 1000;
+      }
     }
 
-    return totalDuration;
+    return totalDuration || 0; // Restituisce 0 se totalDuration è NaN
   }
 
   formatTime(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds <= 0) return "00:00";
     const hours = Math.floor(seconds / 3600); // Calcola le ore
     const minutes = Math.floor((seconds % 3600) / 60); // Calcola i minuti
     const secs = Math.floor(seconds % 60); // Calcola i secondi
@@ -525,15 +647,24 @@ export class FoldersComponent implements OnInit {
 
   // Funzione per convertire i secondi in formato ore:minuti:secondi
   convertSecondsToHMS(seconds: number): string {
+    // Controllo se il valore non è un numero valido
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return "00:00:00";
+    }
+
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const sec = seconds % 60;
+    const secs = Math.floor(seconds % 60);
 
-    return `${this.padZero(hours)}:${this.padZero(minutes)}:${this.padZero(sec)}`;
+    return `${this.padZero(hours)}:${this.padZero(minutes)}:${this.padZero(secs)}`;
   }
 
   private padZero(num: number): string {
-    return num < 10 ? `0${num}` : `${num}`;
+    // Gestione dei casi non numerici
+    if (!Number.isFinite(num)) {
+      return "00";
+    }
+    return num < 10 ? `0${Math.floor(num)}` : `${Math.floor(num)}`;
   }
 
   extractNavData(flightData: string): void {
@@ -677,59 +808,6 @@ export class FoldersComponent implements OnInit {
     return filteredData;
   }
 
-  updateFilteredMs1Visibility(): void {
-    if (!this.map) {
-      console.error('Mappa non inizializzata');
-      return;
-    }
-
-    // Pulisci tutti i layer esistenti
-    Object.values(this.ms1PointsLayers).forEach(layer => {
-      if (layer && this.map.hasLayer(layer)) {
-        layer.clearLayers();
-      }
-    });
-
-    // Verifica dati e mappa
-    if (!this.filteredMs1Points || this.filteredMs1Points.length === 0) {
-      console.log('Nessun punto MS1 filtrato da visualizzare');
-      return;
-    }
-
-    // Raggruppa per targetId
-    const pointsByTarget = this.filteredMs1Points.reduce((acc, point) => {
-      if (!acc[point.targetId]) acc[point.targetId] = [];
-      acc[point.targetId].push(point);
-      return acc;
-    }, {} as { [key: string]: SimpleMs1Point[] });
-
-    // Aggiungi i punti ai layer
-    Object.keys(pointsByTarget).forEach(targetId => {
-      if (this.targetVisibility[targetId] && this.ms1PointsLayers[targetId]) {
-        pointsByTarget[targetId].forEach(point => {
-          L.circleMarker([point.lat, point.lon], {
-            radius: 5,
-            fillColor: this.getColorForTarget(targetId),
-            color: 'dark' + this.getColorForTarget(targetId),
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.8
-          }).addTo(this.ms1PointsLayers[targetId])
-            .bindPopup(`Target: ${targetId}<br>Lat: ${point.lat.toFixed(6)}<br>Lon: ${point.lon.toFixed(6)}`);
-        });
-      }
-    });
-
-    console.log('Punti MS1 aggiornati sulla mappa');
-  }
-
-  // Metodo helper per colori diversi
-  getColorForTarget(targetId: string): string {
-    const colors = ['orange', 'blue', 'green', 'red', 'purple', 'yellow'];
-    const idNumber = parseInt(targetId.replace(/\D/g, '')) || 0; // Estrai numeri dall'ID
-    return colors[idNumber % colors.length];
-  }
-
   getTargetIds(): string[] {
     return Object.keys(this.timestamps || {});
   }
@@ -740,6 +818,7 @@ export class FoldersComponent implements OnInit {
   }
 
   initMap(): void {
+    if (this.map) return;
     if ((!this.targets || this.targets.length === 0) && (!this.flightPath || this.flightPath.length === 0)) {
       console.error('❌ Nessun dato disponibile per la mappa.');
       return;
@@ -770,9 +849,18 @@ export class FoldersComponent implements OnInit {
       this.updateTargetVisibility();
     }
 
+    // Aggiungere i waypoint dei tasks sulla mappa
+    this.addTasksToMap();
+
     this.map.fitBounds([...this.flightPath.map(p => [p.lat, p.lon] as [number, number])]);
     this.uniqueTargets = this.getUniqueTargets(this.targets);
+    setTimeout(() => {
+      this.updateFilteredMs1Visibility();
+      this.updateFlightPath();
+      this.updateTargetVisibility();
+    }, 500);
   }
+
 
   loadMe1Data(): void {
     this.http.get<any[]>('http://localhost:3000/api/me1').subscribe(
@@ -794,6 +882,41 @@ export class FoldersComponent implements OnInit {
     });
 
     return Array.from(uniqueTargets.values());
+  }
+
+  addTasksToMap(): void {
+    if (this.tasks && this.tasks.length > 0) {
+      this.tasksLayer.clearLayers(); // Pulizia dei poligoni precedenti
+
+      this.tasks.forEach(task => {
+        task.waypoints.forEach((wp, index) => {
+          if (
+            index < task.waypoints.length - 1 &&
+            wp.lat != null && wp.lon != null &&
+            task.waypoints[index + 1].lat != null &&
+            task.waypoints[index + 1].lon != null
+          ) {
+            const latLngStart: [number, number] = [wp.lat as number, wp.lon as number];
+            const latLngEnd: [number, number] = [task.waypoints[index + 1].lat as number, task.waypoints[index + 1].lon as number];
+
+            const segment = L.polyline([latLngStart, latLngEnd], {
+              color: 'black',
+              weight: 3,
+              opacity: 0.7
+            });
+
+            this.tasksLayer.addLayer(segment);
+          }
+        });
+      });
+    }
+  }
+  toggleTasksVisibility(): void {
+    if (this.showTasks) {
+      this.tasksLayer.addTo(this.map); // Mostra i task sulla mappa
+    } else {
+      this.tasksLayer.removeFrom(this.map); // Nascondi i task dalla mappa
+    }
   }
 
   updateFlightPath(): void {
@@ -854,10 +977,93 @@ export class FoldersComponent implements OnInit {
     this.updateFlightPath();
   }
 
+
+  updateFilteredMs1Visibility(): void {
+    if (!this.isMapReady()) {
+      console.warn('Mappa non pronta - riprovo tra 300ms');
+      setTimeout(() => this.updateFilteredMs1Visibility(), 300);
+      return;
+    }
+
+    // Inizializza le strutture dati se non esistono
+    this.ms1PointsLayers = this.ms1PointsLayers || {};
+    this.targetVisibility = this.targetVisibility || {};
+
+    if (!this.filteredMs1Points?.length) {
+      console.log('Nessun punto MS1 da visualizzare');
+      return;
+    }
+
+    try {
+      Object.keys(this.timestamps || {}).forEach(targetId => {
+        this.ensureLayerExists(targetId);
+        this.updateLayerVisibility(targetId);
+      });
+    } catch (error) {
+      console.error('Errore nell\'aggiornamento della visibilità:', error);
+    }
+  }
+
+  private ensureLayerExists(targetId: string): void {
+    if (!this.ms1PointsLayers[targetId]) {
+      this.ms1PointsLayers[targetId] = L.layerGroup();
+      if (this.isMapReady()) {
+        this.ms1PointsLayers[targetId].addTo(this.map);
+      }
+    }
+  }
+
+  private updateLayerVisibility(targetId: string): void {
+    const shouldShow = this.targetVisibility[targetId];
+    const layer = this.ms1PointsLayers[targetId];
+
+    if (!layer) return;
+
+    layer.clearLayers();
+
+    if (shouldShow) {
+      this.addPointsToLayer(targetId, layer);
+      if (this.isMapReady() && !this.map.hasLayer(layer)) {
+        layer.addTo(this.map);
+      }
+    } else if (this.isMapReady() && this.map.hasLayer(layer)) {
+      this.map.removeLayer(layer);
+    }
+  }
+
+  private addPointsToLayer(targetId: string, layer: L.LayerGroup): void {
+    this.filteredMs1Points
+      ?.filter(p => p.targetId === targetId)
+      ?.forEach(point => {
+        try {
+          L.circleMarker([point.lat, point.lon], {
+            radius: 5,
+            fillColor: this.getColorForTarget(targetId),
+            color: 'dark' + this.getColorForTarget(targetId),
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+          })
+            .bindPopup(`Target: ${targetId}<br>Lat: ${point.lat.toFixed(6)}<br>Lon: ${point.lon.toFixed(6)}`)
+            .addTo(layer);
+        } catch (e) {
+          console.error(`Errore creando marker per ${targetId}`, e);
+        }
+      });
+  }
+
+  // Metodo helper per colori diversi
+  getColorForTarget(targetId: string): string {
+    const colors = ['orange', 'blue', 'green', 'red', 'purple', 'yellow'];
+    const idNumber = parseInt(targetId.replace(/\D/g, '')) || 0; // Estrai numeri dall'ID
+    return colors[idNumber % colors.length];
+  }
+
   toggleTargetMsVisibility(targetId: string): void {
     this.targetVisibility[targetId] = !this.targetVisibility[targetId];
     this.updateFilteredMs1Visibility();
   }
+
 
 
 

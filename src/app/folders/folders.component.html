@@ -114,7 +114,7 @@
 
 
             <div *ngIf="filteredMs1Points.length > 0">
-                <h3>Punti MS1 Filtrati</h3>
+                <h3>Punti strobe</h3>
                 <div *ngFor="let targetId of getTargetIds()">
                     <label>
                         <input type="checkbox" [checked]="targetVisibility[targetId]"
@@ -123,4 +123,13 @@
                     </label>
                 </div>
             </div>
+
+            <div>
+                <label>
+                    <input type="checkbox" [(ngModel)]="showTasks" (change)="toggleTasksVisibility()" />
+                    Mostra i Leg sulla mappa
+                </label>
+            </div>
+
+
         </div>
