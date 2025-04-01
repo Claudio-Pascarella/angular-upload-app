@@ -45,6 +45,7 @@ interface Task {
   taskName: string;
   waypoints: Waypoint[];
   totalLegs: number;
+  targetName: string;
 }
 
 @Component({
@@ -97,6 +98,8 @@ export class FoldersComponent implements OnInit {
   showTasks: boolean = true;
   tasksLayer: L.LayerGroup = L.layerGroup();
   totalLegs: number = 0;
+  inCountPerTarget: { [targetId: string]: number } = {};
+  extractedTasks: { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number; targetName: string }[] = [];
 
 
   private isMapReady(): boolean {
@@ -264,6 +267,7 @@ export class FoldersComponent implements OnInit {
 
     );
 
+
   }
 
 
@@ -405,48 +409,108 @@ export class FoldersComponent implements OnInit {
   }
 
   // Funzione per estrarre i tasks dal file sbeconf.jsn
-  extractTasksFromJSON(tasks: any[]): { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number }[] {
-    console.log('🔍 tasks ricevuti:', tasks);
+  extractTasksFromJSON(jsonData: any): { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number; targetName: string }[] {
+    console.log('🔍 JSON ricevuto:', jsonData);
 
-    if (!Array.isArray(tasks)) {
-      console.error('❌ Errore: tasks non è un array!', tasks);
+    if (!jsonData?.MissionPlanInfo?.target || !Array.isArray(jsonData.MissionPlanInfo.target)) {
+      console.error('❌ Errore: Nessun target trovato nel JSON!');
       return [];
     }
 
-    const extractedTasks = tasks.map(task => {
-      const taskId = task["@taskid"] || "Sconosciuto";
-      const taskName = task["@taskname"] || "Sconosciuto";
+    // Definiamo il tipo per target
+    type Target = {
+      "@targetid": string;
+      "@targetname": string;
+      tasks?: Task[];
+    };
 
-      // Estrazione dei waypoint validi
-      const waypoints: Waypoint[] = task.waypoint?.map((wp: any) => ({
-        WPid: wp["@WPid"] || "Sconosciuto",
-        nextWPid: wp["@nextWPid"] || "Sconosciuto",
-        lat: wp.wgs84_coord?.["@lat"] ? parseFloat(wp.wgs84_coord["@lat"]) : null,
-        lon: wp.wgs84_coord?.["@lon"] ? parseFloat(wp.wgs84_coord["@lon"]) : null,
-        alt_asl: wp.wgs84_coord?.["@alt_asl"] ? parseFloat(wp.wgs84_coord["@alt_asl"]) : null
-      })) || [];
+    // Definiamo il tipo per task
+    type Task = {
+      "@taskid": string;
+      "@taskname": string;
+      waypoint?: any[];
+    };
 
-      // Filtriamo i waypoint con lat/lon nulli
-      const validWaypoints = waypoints.filter(wp => wp.lat !== null && wp.lon !== null);
+    // Creiamo una mappa dei target per associarli ai task
+    const targetMap = new Map<string, string>(); // targetId -> targetName
+    jsonData.MissionPlanInfo.target.forEach((target: Target) => {
+      if (target["@targetid"] && target["@targetname"]) {
+        targetMap.set(target["@targetid"], target["@targetname"]);
+      }
+    });
 
-      // Calcoliamo il numero di leg (tratti tra waypoint consecutivi)
-      const totalLegs = validWaypoints.length > 0 ? validWaypoints.length - 1 : 0;
+    // Estrazione di tutti i tasks
+    const extractedTasks: { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number; targetName: string }[] = [];
 
-      console.log(`📌 Task ${taskId}: ${validWaypoints.length} waypoint(s), ${totalLegs} leg(s)`);
+    jsonData.MissionPlanInfo.target.forEach((target: Target) => {
+      if (!Array.isArray(target.tasks)) return;
 
-      return {
-        taskId,
-        taskName,
-        waypoints: validWaypoints,
-        totalLegs
-      };
+      target.tasks.forEach((task: Task) => {
+        const taskId = task["@taskid"] || "Sconosciuto";
+        const taskName = task["@taskname"] || "Sconosciuto";
+        const targetName = targetMap.get(target["@targetid"]) || "Sconosciuto"; // Associa targetName al task
+
+        // Estrazione dei waypoint validi
+        const waypoints: Waypoint[] = task.waypoint?.map((wp: any) => ({
+          WPid: wp["@WPid"] || "Sconosciuto",
+          nextWPid: wp["@nextWPid"] || "Sconosciuto",
+          lat: wp.wgs84_coord?.["@lat"] ? parseFloat(wp.wgs84_coord["@lat"]) : null,
+          lon: wp.wgs84_coord?.["@lon"] ? parseFloat(wp.wgs84_coord["@lon"]) : null,
+          alt_asl: wp.wgs84_coord?.["@alt_asl"] ? parseFloat(wp.wgs84_coord["@alt_asl"]) : null
+        })) || [];
+
+        // Filtriamo i waypoint con lat/lon nulli
+        const validWaypoints = waypoints.filter(wp => wp.lat !== null && wp.lon !== null);
+
+        // Calcoliamo il numero di leg (tratti tra waypoint consecutivi)
+        const totalLegs = validWaypoints.length > 0 ? validWaypoints.length - 1 : 0;
+
+        console.log(`📌 Task ${taskId} (${targetName}): ${validWaypoints.length} waypoint(s), ${totalLegs} leg(s)`);
+
+        extractedTasks.push({
+          taskId,
+          taskName,
+          waypoints: validWaypoints,
+          totalLegs,
+          targetName // Assicuriamo che il task abbia il nome del target corretto
+        });
+      });
     });
 
     // Calcoliamo il totale complessivo di tutti i leg
     this.totalLegs = extractedTasks.reduce((sum, task) => sum + task.totalLegs, 0);
     console.log(`Totale generale: ${this.totalLegs} leg(s)`);
 
+    // Raggruppiamo per targetName e calcoliamo i leg per target
+    const legsPerTarget = extractedTasks.reduce((acc, task) => {
+      if (!acc[task.targetName]) {
+        acc[task.targetName] = 0;
+      }
+      acc[task.targetName] += task.totalLegs;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    console.log('Legs per target:', legsPerTarget);
+
+    this.tasks = this.extractTasksFromJSON(jsonData);
+    console.log("📝 Tasks Estratti:", this.tasks);
+
     return extractedTasks;
+  }
+
+  getLegsPerTarget(): { targetName: string; legsCount: number }[] {
+    const legsMap = this.tasks.reduce((acc, task) => {
+      if (!acc[task.targetName]) {
+        acc[task.targetName] = 0;
+      }
+      acc[task.targetName] += task.totalLegs;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    return Object.keys(legsMap).map(targetName => ({
+      targetName,
+      legsCount: legsMap[targetName]
+    }));
   }
 
   // Funzione che calcola la distanza tra due punti usando la formula di Haversine
@@ -548,26 +612,33 @@ export class FoldersComponent implements OnInit {
 
     // Inizializza l'oggetto per memorizzare i timestamp per target
     this.timestamps = {};
+    this.inCountPerTarget = {};
+
 
 
     logArray.forEach(line => {
       const match = line.match(/^(\d+) - INFO: (IN|OUT) TARGET (\d+) \(\d+\) \(DSA\)/);
       if (match) {
-        const timestamp = parseInt(match[1]) * 1000; // Conserva come numero
-        const type = match[2] as keyof { IN: number[]; OUT: number[] };
         const targetId = match[3];
+        const type = match[2] as keyof { IN: number[]; OUT: number[] };
 
         if (!this.timestamps[targetId]) {
-          this.timestamps[targetId] = {
-            IN: [],
-            OUT: []
-          };
+          this.timestamps[targetId] = { IN: [], OUT: [] };
+          this.inCountPerTarget[targetId] = 0; // Inizializza a 0 per questo target
         }
 
+        if (type === 'IN') {
+          this.inCountPerTarget[targetId]++; // Incrementa il conteggio
+        }
+
+        const timestamp = parseInt(match[1]) * 1000;
         this.timestamps[targetId][type].push(timestamp);
       }
     });
+
+    console.log('Conteggio IN per target:', this.inCountPerTarget);
     console.log('Timestamps estratti:', this.timestamps);
+
 
     this.flightTimes = this.calculateFlightTime();
     console.log('Tempi di volo:', this.flightTimes);

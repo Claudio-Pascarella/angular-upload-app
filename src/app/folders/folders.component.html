@@ -2,18 +2,19 @@
     <h2>{{ folderPath }}</h2>
 </div>
 
-
 <div class="container">
-
     <div class="container-flight">
-
         <div class="section-flight">
             <h3>
                 <i class="fa-solid fa-plane-departure"></i>
                 Decollo:
             </h3>
-            <p *ngFor="let timestamp of takeoffTimestamps">{{ timestamp }}</p>
-            <p *ngIf="takeoffTimestamps.length === 0">Nessun decollo rilevato.</p>
+            @for (timestamp of takeoffTimestamps; track $index) {
+            <p>{{ timestamp }}</p>
+            }
+            @if (takeoffTimestamps.length === 0) {
+            <p>Nessun decollo rilevato.</p>
+            }
         </div>
 
         <!-- Sezione Landing -->
@@ -22,72 +23,79 @@
                 <i class="fa-solid fa-plane-arrival"></i>
                 Atterraggio:
             </h3>
-            <p *ngFor="let timestamp of landingTimestamps">{{ timestamp }}</p>
-            <p *ngIf="landingTimestamps.length === 0">Nessun atterraggio rilevato.</p>
+            @for (timestamp of landingTimestamps; track $index) {
+            <p>{{ timestamp }}</p>
+            }
+            @if (landingTimestamps.length === 0) {
+            <p>Nessun atterraggio rilevato.</p>
+            }
         </div>
 
-        <div *ngIf="totalDurationInSeconds > 0" class="section-flight">
+        @if (totalDurationInSeconds > 0) {
+        <div class="section-flight">
             <h3>
                 <i class="fa-solid fa-plane-up"></i>
                 Durata volo:
             </h3>
             <p class="p-flight">{{convertSecondsToHMS(totalDurationInSeconds) }}</p>
         </div>
+        }
 
-        <div *ngIf="totalDistance" class="section-flight">
+        @if (totalDistance) {
+        <div class="section-flight">
             <h3>
                 <i class="fa-solid fa-earth-europe"></i>
                 Lunghezza volo:
             </h3>
             <p>{{ totalDistance | number: '1.0-2' }} km</p>
         </div>
+        }
 
-
-        <div *ngFor="let target of uniqueTargets" style="margin-top: 2rem;">
-            <p><strong>Target: {{ target.targetname }}</strong></p>
+        <!-- Sezione dettagli target - versione più sicura -->
+        @for (target of uniqueTargets || []; track $index) {
+        <div style="margin-top: 2rem;">
+            <p><strong>Target: {{ target?.targetname }}</strong></p>
             <ul>
-                <li>Lunghezza Target: {{ target.totalDistance | number:'1.2-2' }} km</li>
-                <li>Tempo di volo: {{ formatFlightTime(target.flightTime) }}</li>
+                <li>Lunghezza Target: {{ target?.totalDistance | number:'1.2-2' }} km</li>
+                <li>Tempo di volo: {{ formatFlightTime(target?.flightTime) }}</li>
+                <li>Leg effettuati: {{ (inCountPerTarget[target?.targetId] || 0) }}</li>
             </ul>
         </div>
-
-
+        }
     </div>
-
-
 
     <div class="vertical-line1"></div>
 
     <div class="section-trolley">
-
         <h3 class="trolley-name">Trolleys: {{ trolleysName }}</h3>
-        <div *ngIf="trolleysFolders.length > 1" class="sensor">
-            <ng-container *ngFor="let folder of trolleysFolders; let i = index">
-                <p *ngIf="i < trolleysFolders.length - 1">
-                    <i class="fa-solid fa-camera"></i>
-                    {{ folder }}
+        @if (trolleysFolders.length > 1) {
+        <div class="sensor">
+            @for (folder of trolleysFolders; let i = $index; track $index) {
+            @if (i < trolleysFolders.length - 1) { <p>
+                <i class="fa-solid fa-camera"></i>
+                {{ folder }}
                 </p>
-                <hr *ngIf="i < trolleysFolders.length - 2" class="vertical-line2">
-            </ng-container>
+                }
+                @if (i < trolleysFolders.length - 2) { <hr class="vertical-line2">
+                    }
+                    }
         </div>
+        }
 
         <div class="ilx">
-            <div *ngIf="me1Data && me1Data.length > 0">
-                <p>Totale Trigger: {{ me1Data.length }}</p>
-            </div>
+            @if (me1Data && me1Data.length > 0) {
+            <p>Totale Trigger: {{ me1Data.length }}</p>
+            }
 
-
-            <div *ngIf="ms1Data.length > 0">
-                <p>Totale Strobe: {{ ms1Data.length }}</p>
-            </div>
+            @if (ms1Data.length > 0) {
+            <p>Totale Strobe: {{ ms1Data.length }}</p>
+            }
 
             <p>Totale immagini: {{ imageCount }}</p>
         </div>
-
     </div>
 
     <div class="vertical-line"></div>
-
 
     <div class="map-container">
         <div class="map">
@@ -102,27 +110,24 @@
                 </label>
             </div>
 
-
             <h4 class="targets">Targets:</h4>
-            <div *ngFor="let target of uniqueTargets">
-                <label>
-                    <input type="checkbox" [checked]="target.visible"
-                        (change)="toggleTargetVisibility(target.targetname)">
-                    {{ target.targetname }}
-                </label>
-            </div>
+            @for (target of uniqueTargets; track $index) {
+            <label>
+                <input type="checkbox" [checked]="target.visible" (change)="toggleTargetVisibility(target.targetname)">
+                {{ target.targetname }}
+            </label>
+            }
 
-
-            <div *ngIf="filteredMs1Points.length > 0">
-                <h3>Punti strobe</h3>
-                <div *ngFor="let targetId of getTargetIds()">
-                    <label>
-                        <input type="checkbox" [checked]="targetVisibility[targetId]"
-                            (change)="toggleTargetMsVisibility(targetId)">
-                        Target {{targetId}} ({{countPointsForTarget(targetId)}} strobe)
-                    </label>
-                </div>
-            </div>
+            @if (filteredMs1Points.length > 0) {
+            <h3>Punti strobe</h3>
+            @for (targetId of getTargetIds(); track $index) {
+            <label>
+                <input type="checkbox" [checked]="targetVisibility[targetId]"
+                    (change)="toggleTargetMsVisibility(targetId)">
+                Target {{targetId}} ({{countPointsForTarget(targetId)}} strobe)
+            </label>
+            }
+            }
 
             <div>
                 <label>
@@ -133,3 +138,6 @@
 
 
         </div>
+    </div>
+
+</div>
