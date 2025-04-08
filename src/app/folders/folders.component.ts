@@ -6,6 +6,7 @@ import * as L from 'leaflet';
 import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { MatCardModule } from '@angular/material/card';
 
 interface FilteredMs1Data {
   [key: string]: {
@@ -24,6 +25,7 @@ interface TargetTimestamps {
 
 interface SimpleMs1Point {
   targetId: string;
+  targetName?: string;
   lat: number;
   lon: number;
 }
@@ -51,7 +53,7 @@ interface Task {
 @Component({
   selector: 'app-folders',
   standalone: true,
-  imports: [CommonModule, LeafletModule, FormsModule],
+  imports: [CommonModule, LeafletModule, FormsModule, MatCardModule],
   templateUrl: './folders.component.html',
   styleUrls: ['./folders.component.css']
 })
@@ -100,11 +102,20 @@ export class FoldersComponent implements OnInit {
   totalLegs: number = 0;
   inCountPerTarget: { [targetId: string]: number } = {};
   extractedTasks: { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number; targetName: string }[] = [];
+  targetGroups: { [key: string]: L.LayerGroup } = {};
+  legsPerTarget: { targetName: string; totalLegs: number }[] = [];
+  targetPointCounts: { targetName: string, pointCount: number }[] = [];
+  targetIdToNameMap: { [id: string]: string } = {};
+  targetMap: Map<string, string> = new Map();
+  targetAssociations: { targetId: string; targetName: string }[] = [];
+  metadata: any[] = [];
+  targetNamesAndIds: { targetname: string; targetId: string }[] = [];
+  taskLegsVisibility: { [key: string]: boolean } = {};
+  strobeVisibility: { [key: string]: boolean } = {};
 
 
-  private isMapReady(): boolean {
-    return !!this.map && typeof this.map.addLayer === 'function' && (this.map as any)._loaded;
-  }
+
+
   private map!: L.Map;
   private ms1PointsLayers: { [targetId: string]: L.LayerGroup } = {};
   private flightPathLayer?: L.Polyline;
@@ -123,6 +134,7 @@ export class FoldersComponent implements OnInit {
 
 
   ngOnInit(): void {
+
     this.http.get<{ count: number }>('http://localhost:3000/api/image-count').subscribe(
       data => {
         this.imageCount = data.count; // Assegna il numero di immagini
@@ -164,29 +176,50 @@ export class FoldersComponent implements OnInit {
         // Ora chiamo il filtro SOLO DOPO extractTimestamps
         setTimeout(() => {
           const filteredResults = this.filterMs1DataByFlightTimes();
+
+          // Aggiungi i dati di targetNamesAndIds al log
           console.log("📌 Dati filtrati per target:", JSON.stringify(filteredResults, null, 2));
+          console.log("Dati targetNamesAndIds:", JSON.stringify(this.targetNamesAndIds, null, 2));
         }, 100);
       },
       error => console.error('Errore nel recupero dati:', error)
     );
 
     this.http.get<any>(this.apiUrlSbeconf).subscribe(
-      data => {
-        console.log('📥 Dati ricevuti da sbeconf:', data);
+      response => {
+        console.log('📥 Dati ricevuti da sbeconf:', response);
 
-        // Estrarre solo l'array `targets`
-        if (!data || !Array.isArray(data.targets)) {
-          console.error('❌ Errore: "targets" non è un array!', data.targets);
+        // Estraiamo metadata, targets e tasks dalla risposta
+        const { metadata = [], targets = [], tasks = [] } = response;
+
+        if (!Array.isArray(metadata)) {
+          console.error('❌ Errore: "metadata" non è un array valido!', metadata);
           return;
         }
 
-        this.targets = this.extractTargetsFromJSON(data.targets); // Passa SOLO `data.targets`
-        this.tasks = data.tasks || []; // Se `tasks` è undefined, assegna un array vuoto
+        if (!Array.isArray(targets)) {
+          console.error('❌ Errore: "targets" non è un array valido!', targets);
+          return;
+        }
 
+        if (!Array.isArray(tasks)) {
+          console.error('❌ Errore: "tasks" non è un array valido!', tasks);
+          return;
+        }
+
+        // ✅ Salviamo separatamente i metadati, i targets e i tasks
+        this.metadata = metadata;
+        this.targets = this.extractTargetsFromJSON(targets);
+        this.tasks = tasks;
+
+        console.log('📊 Metadati ricevuti:', this.metadata);
         console.log('✅ Targets estratti:', this.targets);
-        console.log('✅ Tasks:', this.tasks);
+        console.log('✅ Tasks ricevuti:', this.tasks);
 
-        // Continua con la logica
+        // Processiamo il conteggio dei punti per target
+        this.targetPointCounts = this.countPointsPerTarget(this.tasks);
+
+        // Il resto della logica rimane invariato
         const targetGroups = this.groupTargetsByName();
         this.assignTargetIdsToGroups(targetGroups);
         this.assignFlightTimes(this.targets, this.flightTimes);
@@ -195,10 +228,10 @@ export class FoldersComponent implements OnInit {
           target.totalDistance = this.calculateTotalDistanceForTarget(target.targetname);
         });
 
-        console.log('🎯 Targets unici:', this.uniqueTargets);
+        console.log('🚀 Lista targets unici con distanza:', this.uniqueTargets);
       },
       error => {
-        console.error('❌ Errore nella chiamata a sbeconf:', error);
+        console.error('❌ Errore durante la chiamata API a sbeconf:', error);
       }
     );
 
@@ -368,7 +401,7 @@ export class FoldersComponent implements OnInit {
   }
 
 
-  // Funzione per estrarre i targets in modo unico
+  // Funzione per estrarre i targets in modo unico con targetId progressivi
   extractTargetsFromJSON(targets: any[]): { targetname: string; lat: number; lon: number; targetId: string; flightTime: number }[] {
     console.log('🔍 targets ricevuti:', targets);
 
@@ -381,34 +414,42 @@ export class FoldersComponent implements OnInit {
     // Usa una mappa per ottenere targets unici
     const uniqueTargets = new Map<string, { targetname: string; lat: number; lon: number; targetId: string; flightTime: number }>();
 
-    targets.forEach((target, index) => {
+    // Variabile per salvare i targetname e targetId con ID progressivi
+    this.targetNamesAndIds = [];
+
+    // Set per tracciare targetname unici
+    const seenTargetNames = new Set<string>();
+
+    // Contatore per targetId progressivo
+    let targetCounter = 0;
+
+    targets.forEach(target => {
       if (!target || typeof target !== 'object') {
         console.error('⚠️ Target non valido:', target);
         return;
       }
 
-      // Assegna un ID unico per ogni target
-      const targetId = target.targetid || `target-${index}`;
-      const flightTime = this.flightTimes[targetId] || 0;
+      const targetname = target.targetname || "Sconosciuto";
 
-      // Se il target non è già presente nella mappa, aggiungilo
-      if (!uniqueTargets.has(targetId)) {
-        uniqueTargets.set(targetId, {
-          targetname: target.targetname || "Sconosciuto",
-          lat: target.lat ?? 0, // Usa 0 se non è definito
-          lon: target.lon ?? 0,
-          targetId: targetId,
-          flightTime: flightTime
+      // Aggiungi targetname e assegna un targetId progressivo solo se non è già stato visto
+      if (!seenTargetNames.has(targetname)) {
+        const targetId = `${targetCounter++}`; // Assegna un targetId progressivo
+        this.targetNamesAndIds.push({
+          targetname: targetname,
+          targetId: targetId
         });
+        seenTargetNames.add(targetname); // Marca il targetname come visto
       }
     });
 
-    // Restituisci un array con i valori unici
-    console.log('✅ Targets estratti:', Array.from(uniqueTargets.values()));
-    return Array.from(uniqueTargets.values());
+    // Logga i targetname e targetId solo una volta, dopo che l'elaborazione è completa
+    console.log('📌 targetname e targetId ', this.targetNamesAndIds);
+
+    return [];
   }
 
-  // Funzione per estrarre i tasks dal file sbeconf.jsn
+
+  /// Funzione per estrarre i tasks dal file sbeconf.jsn
   extractTasksFromJSON(jsonData: any): { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number; targetName: string }[] {
     console.log('🔍 JSON ricevuto:', jsonData);
 
@@ -439,6 +480,8 @@ export class FoldersComponent implements OnInit {
       }
     });
 
+    console.log('🔍 targetMap:', targetMap);
+
     // Estrazione di tutti i tasks
     const extractedTasks: { taskId: string; taskName: string; waypoints: Waypoint[]; totalLegs: number; targetName: string }[] = [];
 
@@ -448,7 +491,11 @@ export class FoldersComponent implements OnInit {
       target.tasks.forEach((task: Task) => {
         const taskId = task["@taskid"] || "Sconosciuto";
         const taskName = task["@taskname"] || "Sconosciuto";
-        const targetName = targetMap.get(target["@targetid"]) || "Sconosciuto"; // Associa targetName al task
+
+        // Associa targetName al task
+        const targetName = targetMap.get(target["@targetid"]) || "Sconosciuto";
+
+        console.log(`📌 Task ID: ${taskId}, Task Name: ${taskName}, Target Name: ${targetName}`);
 
         // Estrazione dei waypoint validi
         const waypoints: Waypoint[] = task.waypoint?.map((wp: any) => ({
@@ -492,8 +539,11 @@ export class FoldersComponent implements OnInit {
 
     console.log('Legs per target:', legsPerTarget);
 
-    this.tasks = this.extractTasksFromJSON(jsonData);
+    // Aggiorniamo la variabile this.tasks
+    this.tasks = extractedTasks;
     console.log("📝 Tasks Estratti:", this.tasks);
+    this.legsPerTarget = this.calculateLegsPerTarget();
+    console.log('Legs per target:', this.legsPerTarget);
 
     return extractedTasks;
   }
@@ -513,6 +563,67 @@ export class FoldersComponent implements OnInit {
     }));
   }
 
+  calculateLegsPerTarget(): { targetName: string; totalLegs: number }[] {
+    const legsMap = this.tasks.reduce((acc, task) => {
+      if (!acc[task.targetName]) {
+        acc[task.targetName] = 0;
+      }
+      acc[task.targetName] += task.totalLegs;
+      return acc;
+    }, {} as { [key: string]: number });
+
+    return Object.keys(legsMap).map(targetName => ({
+      targetName,
+      totalLegs: legsMap[targetName]
+    }));
+  }
+  countPointsPerTarget(tasks: Task[]): { targetName: string, pointCount: number }[] {
+    const countMap = new Map<string, number>();
+
+    tasks.forEach(task => {
+      // Filtra solo i waypoint con lat/lon validi
+      const validWaypoints = task.waypoints.filter(wp => wp.lat !== null && wp.lon !== null);
+      const currentCount = countMap.get(task.targetName) || 0;
+      countMap.set(task.targetName, currentCount + validWaypoints.length / 2);
+    });
+
+    return Array.from(countMap.entries()).map(([targetName, pointCount]) => ({
+      targetName,
+      pointCount
+    }));
+  }
+
+  getTotalPoints(): number {
+    return this.targetPointCounts.reduce((sum, item) => sum + item.pointCount, 0);
+  }
+
+  getPointCountForTarget(targetName: string): number | null {
+    const target = this.targetPointCounts.find(t => t.targetName === targetName);
+    return target ? target.pointCount : null;
+  }
+
+  // Verifica se un target ha punti strobe
+  hasStrobePoints(targetName: string): boolean {
+    const targetId = this.getTargetId(targetName);
+    return this.filteredMs1Points.some(p => p.targetId === targetId);
+  }
+
+  // Conta i punti strobe per target
+  countStrobePoints(targetName: string): number {
+    const targetId = this.getTargetId(targetName);
+    return this.filteredMs1Points.filter(p => p.targetId === targetId).length;
+  }
+
+  // Verifica se un target ha task legs
+  hasTaskLegs(targetName: string): boolean {
+    return this.tasks.some(task => task.targetName === targetName);
+  }
+
+  // Ottieni l'ID del target dal nome
+  getTargetId(targetName: string): string {
+    const target = this.uniqueTargets.find(t => t.targetname === targetName);
+    return target?.targetId || '';
+  }
   // Funzione che calcola la distanza tra due punti usando la formula di Haversine
   haversineTargetDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371e3; // Raggio della Terra in metri
@@ -619,7 +730,7 @@ export class FoldersComponent implements OnInit {
     logArray.forEach(line => {
       const match = line.match(/^(\d+) - INFO: (IN|OUT) TARGET (\d+) \(\d+\) \(DSA\)/);
       if (match) {
-        const targetId = match[3];
+        const targetId = String(match[3]);
         const type = match[2] as keyof { IN: number[]; OUT: number[] };
 
         if (!this.timestamps[targetId]) {
@@ -794,99 +905,124 @@ export class FoldersComponent implements OnInit {
     return this.targetDistances[targetName].reduce((sum, distance) => sum + distance, 0);
   }
 
+
   // Funzione che filtra i dati di ms1Data usando timestamp numerici
-  filterMs1DataByFlightTimes(): { [key: string]: { IN: number; OUT: number; data: any[] }[] } {
-    const filteredData: { [key: string]: { IN: number; OUT: number; data: any[] }[] } = {};
+  filterMs1DataByFlightTimes(): {
+    [key: string]: {
+      targetName: string;
+      data: { IN: number; OUT: number; data: any[] }[];
+    };
+  } {
+    const filteredData: {
+      [key: string]: {
+        targetName: string;
+        data: { IN: number; OUT: number; data: any[] }[];
+      };
+    } = {};
+
     this.filteredMs1Points = [];
 
-    if (!this.timestamps) {
-      console.error('Timestamps non disponibili');
+    if (!this.timestamps || Object.keys(this.timestamps).length === 0) {
+      console.warn('⛔ Nessun timestamp disponibile');
       return filteredData;
     }
 
-    // Verifica che la mappa esista
-    if (!this.map) {
-      console.error('Mappa non inizializzata');
-      return filteredData;
-    }
+    // 🔹 Mappa ID -> Nome target
+    const targetIdToName = this.targetNamesAndIds.reduce((acc, t) => {
+      acc[String(t.targetId)] = t.targetname; // Assicura che targetId sia trattato come stringa
+      return acc;
+    }, {} as { [key: string]: string });
 
-    Object.keys(this.timestamps).forEach(targetId => {
-      // Inizializza il layer solo se non esiste
-      if (!this.ms1PointsLayers[targetId]) {
-        this.ms1PointsLayers[targetId] = L.layerGroup();
-        // Aggiungi il layer alla mappa solo se esiste
-        if (this.map) {
-          this.ms1PointsLayers[targetId].addTo(this.map);
-        }
+    const mapReady = !!this.map && typeof this.map.addLayer === 'function';
+
+    Object.entries(this.timestamps).forEach(([targetId, targetTimestamps]) => {
+      const targetIdStr = String(targetId); // Assicura che targetId sia una stringa
+      const targetName = targetIdToName[targetIdStr] || "Sconosciuto";  // Usa "Sconosciuto" come fallback
+
+      // Se la mappa è pronta e il layer non esiste, crea il layer
+      if (mapReady && !this.ms1PointsLayers[targetIdStr]) {
+        this.ms1PointsLayers[targetIdStr] = L.layerGroup().addTo(this.map);
       }
 
-      if (this.targetVisibility[targetId] === undefined) {
-        this.targetVisibility[targetId] = false;
-      }
+      this.targetVisibility[targetIdStr] = this.targetVisibility[targetIdStr] ?? false;
 
-      filteredData[targetId] = [];
-      const target = this.timestamps[targetId];
-      const numPairs = Math.min(target.IN.length, target.OUT.length);
+      filteredData[targetIdStr] = {
+        targetName,
+        data: []
+      };
+
+      const numPairs = Math.min(targetTimestamps.IN.length, targetTimestamps.OUT.length);
 
       for (let i = 0; i < numPairs; i++) {
-        const inTime = target.IN[i];
-        const outTime = target.OUT[i];
+        const inTime = targetTimestamps.IN[i];
+        const outTime = targetTimestamps.OUT[i];
 
-        if (typeof inTime === 'number' && !isNaN(inTime) &&
-          typeof outTime === 'number' && !isNaN(outTime)) {
-
-          const ms1Filtered = this.ms1Data.filter(entry => {
-            const entryTime = entry.timestamp;
-            return typeof entryTime === 'number' &&
-              !isNaN(entryTime) &&
-              entryTime >= inTime &&
-              entryTime <= outTime;
-          });
-
-          // Aggiungi i punti filtrati alla nuova variabile
-          ms1Filtered.forEach(point => {
-            this.filteredMs1Points.push({
-              targetId: targetId,
-              lat: point.lat,
-              lon: point.lon
-            });
-          });
-
-          filteredData[targetId].push({
-            IN: inTime,
-            OUT: outTime,
-            data: ms1Filtered
-          });
+        // Se i timestamp non sono validi, salta questo ciclo
+        if (!this.isValidTimestamp(inTime) || !this.isValidTimestamp(outTime)) {
+          console.warn(`⚠️ Timestamp non valido per targetId ${targetIdStr}: IN=${inTime}, OUT=${outTime}`);
+          continue;
         }
+
+        // Filtra i dati MS1 in base ai timestamp
+        const ms1Filtered = this.ms1Data.filter(entry =>
+          this.isValidTimestamp(entry.timestamp) &&
+          entry.timestamp >= inTime &&
+          entry.timestamp <= outTime
+        );
+
+        ms1Filtered.forEach(point => {
+          this.filteredMs1Points.push({
+            targetId: targetIdStr,
+            targetName,
+            lat: point.lat,
+            lon: point.lon
+          });
+        });
+
+        // Aggiungi il dato filtrato per il target
+        filteredData[targetIdStr].data.push({
+          IN: inTime,
+          OUT: outTime,
+          data: ms1Filtered
+        });
       }
     });
 
-    console.log('Punti MS1 filtrati semplificati:', this.filteredMs1Points);
-
-    // Assicura che tutti i target abbiano uno stato di visibilità
-    Object.keys(filteredData).forEach(targetId => {
-      if (!this.targetVisibility.hasOwnProperty(targetId)) {
-        this.targetVisibility[targetId] = false;
-      }
-    });
-
-    // Forza l'aggiornamento della mappa nel prossimo ciclo di eventi
-    setTimeout(() => {
-      this.updateFilteredMs1Visibility();
-      console.log('Mappa aggiornata con punti filtrati');
-    }, 0);
+    // Aggiorna la visibilità dei punti MS1 sulla mappa (solo se la mappa è pronta)
+    if (mapReady) {
+      setTimeout(() => {
+        this.updateFilteredMs1Visibility();
+        console.log('✅ Mappa aggiornata con punti filtrati');
+      }, 0);
+    }
 
     return filteredData;
   }
 
-  getTargetIds(): string[] {
-    return Object.keys(this.timestamps || {});
+  // 🔹 Funzione di supporto per verificare se un timestamp è valido
+  isValidTimestamp(time: any): boolean {
+    return typeof time === 'number' && !isNaN(time);
   }
 
-  countPointsForTarget(targetId: string): number {
-    if (!this.filteredMs1Points) return 0;
-    return this.filteredMs1Points.filter(p => p.targetId === targetId).length;
+  getTargetNames(): string[] {
+    return this.targetNamesAndIds.map(t => t.targetname);
   }
+
+  countPointsForTarget(targetName: string): number {
+    if (!this.filteredMs1Points) return 0;
+
+    // Conta i punti filtrati per targetName
+    const count = this.filteredMs1Points.filter(p => p.targetName === targetName).length;
+
+    // Trova il target corrispondente
+    const target = this.targetNamesAndIds.find(t => t.targetname === targetName);
+    const name = target ? target.targetname : "Sconosciuto";
+
+    console.log(`ℹ️ ${name} (${targetName}) ha ${count} punti filtrati`);
+
+    return count;
+  }
+
 
   initMap(): void {
     if (this.map) return;
@@ -955,6 +1091,7 @@ export class FoldersComponent implements OnInit {
     return Array.from(uniqueTargets.values());
   }
 
+  // Funzione per aggiungere i task alla mappa
   addTasksToMap(): void {
     if (this.tasks && this.tasks.length > 0) {
       this.tasksLayer.clearLayers(); // Pulizia dei poligoni precedenti
@@ -976,17 +1113,44 @@ export class FoldersComponent implements OnInit {
               opacity: 0.7
             });
 
-            this.tasksLayer.addLayer(segment);
+            // Crea un LayerGroup per ogni targetName se non esiste già
+            if (!this.targetGroups[task.targetName]) {
+              this.targetGroups[task.targetName] = L.layerGroup();
+              // Imposta la visibilità iniziale su false (nascosto)
+              this.targetVisibility[task.targetName] = false;
+            }
+
+            // Aggiungi il segmento al gruppo specifico per il target
+            this.targetGroups[task.targetName].addLayer(segment);
           }
         });
       });
+
+      // Inizialmente NON aggiungere i gruppi alla mappa
+      Object.keys(this.targetGroups).forEach(targetName => {
+        if (this.targetVisibility[targetName]) {
+          this.map.addLayer(this.targetGroups[targetName]);
+        }
+      });
     }
   }
-  toggleTasksVisibility(): void {
-    if (this.showTasks) {
-      this.tasksLayer.addTo(this.map); // Mostra i task sulla mappa
+
+  // La funzione toggle per mostrare/nascondere i task divisi per targetName
+  toggleTasksVisibility(targetName: string): void {
+    // Cambia solo la visibilità dei Task Legs per il target
+    this.taskLegsVisibility[targetName] = !this.taskLegsVisibility[targetName];
+
+    // Verifica se la visibilità dei Task Legs è attiva
+    if (this.taskLegsVisibility[targetName]) {
+      // Aggiungi il layer dei task legs
+      if (!this.map.hasLayer(this.targetGroups[targetName])) {
+        this.map.addLayer(this.targetGroups[targetName]);
+      }
     } else {
-      this.tasksLayer.removeFrom(this.map); // Nascondi i task dalla mappa
+      // Rimuovi il layer dei task legs
+      if (this.map.hasLayer(this.targetGroups[targetName])) {
+        this.map.removeLayer(this.targetGroups[targetName]);
+      }
     }
   }
 
@@ -1050,13 +1214,12 @@ export class FoldersComponent implements OnInit {
 
 
   updateFilteredMs1Visibility(): void {
-    if (!this.isMapReady()) {
-      console.warn('Mappa non pronta - riprovo tra 300ms');
-      setTimeout(() => this.updateFilteredMs1Visibility(), 300);
+    if (!this.map) {
+      console.warn('Mappa non ancora inizializzata - riprovo tra 500ms');
+      setTimeout(() => this.updateFilteredMs1Visibility(), 500);
       return;
     }
 
-    // Inizializza le strutture dati se non esistono
     this.ms1PointsLayers = this.ms1PointsLayers || {};
     this.targetVisibility = this.targetVisibility || {};
 
@@ -1066,78 +1229,66 @@ export class FoldersComponent implements OnInit {
     }
 
     try {
-      Object.keys(this.timestamps || {}).forEach(targetId => {
-        this.ensureLayerExists(targetId);
-        this.updateLayerVisibility(targetId);
+      Object.keys(this.targetVisibility).forEach(targetname => {
+        if (!this.ms1PointsLayers[targetname]) {
+          this.ms1PointsLayers[targetname] = L.layerGroup().addTo(this.map);
+        }
+
+        const shouldShow = this.targetVisibility[targetname];
+        const layer = this.ms1PointsLayers[targetname];
+
+        layer.clearLayers();
+
+        if (shouldShow) {
+          this.filteredMs1Points
+            .filter(p => p.targetName === targetname) // Filtra per targetName
+            .forEach(point => {
+              L.circleMarker([point.lat, point.lon], {
+                radius: 5,
+                fillColor: this.getColorForTarget(targetname), // Usa targetname per determinare il colore
+                color: 'dark' + this.getColorForTarget(targetname),
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+              }).addTo(layer);
+            });
+        }
       });
     } catch (error) {
       console.error('Errore nell\'aggiornamento della visibilità:', error);
     }
   }
 
-  private ensureLayerExists(targetId: string): void {
-    if (!this.ms1PointsLayers[targetId]) {
-      this.ms1PointsLayers[targetId] = L.layerGroup();
-      if (this.isMapReady()) {
-        this.ms1PointsLayers[targetId].addTo(this.map);
-      }
-    }
-  }
 
-  private updateLayerVisibility(targetId: string): void {
-    const shouldShow = this.targetVisibility[targetId];
-    const layer = this.ms1PointsLayers[targetId];
-
-    if (!layer) return;
-
-    layer.clearLayers();
-
-    if (shouldShow) {
-      this.addPointsToLayer(targetId, layer);
-      if (this.isMapReady() && !this.map.hasLayer(layer)) {
-        layer.addTo(this.map);
-      }
-    } else if (this.isMapReady() && this.map.hasLayer(layer)) {
-      this.map.removeLayer(layer);
-    }
-  }
-
-  private addPointsToLayer(targetId: string, layer: L.LayerGroup): void {
-    this.filteredMs1Points
-      ?.filter(p => p.targetId === targetId)
-      ?.forEach(point => {
-        try {
-          L.circleMarker([point.lat, point.lon], {
-            radius: 5,
-            fillColor: this.getColorForTarget(targetId),
-            color: 'dark' + this.getColorForTarget(targetId),
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.8
-          })
-            .bindPopup(`Target: ${targetId}<br>Lat: ${point.lat.toFixed(6)}<br>Lon: ${point.lon.toFixed(6)}`)
-            .addTo(layer);
-        } catch (e) {
-          console.error(`Errore creando marker per ${targetId}`, e);
-        }
-      });
-  }
 
   // Metodo helper per colori diversi
-  getColorForTarget(targetId: string): string {
+  getColorForTarget(targetName: string): string {
     const colors = ['orange', 'blue', 'green', 'red', 'purple', 'yellow'];
-    const idNumber = parseInt(targetId.replace(/\D/g, '')) || 0; // Estrai numeri dall'ID
-    return colors[idNumber % colors.length];
+
+    // Usa una funzione hash semplice per mappare il targetName in un numero
+    const hash = [...targetName].reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+    // Restituisci un colore in base al targetName
+    return colors[hash % colors.length];
   }
 
-  toggleTargetMsVisibility(targetId: string): void {
-    this.targetVisibility[targetId] = !this.targetVisibility[targetId];
+  toggleStrobeVisibility(targetName: string): void {
+    this.strobeVisibility[targetName] = !this.strobeVisibility[targetName];
+
+    // Logica per aggiornare la visibilità dei punti Strobe sulla mappa
     this.updateFilteredMs1Visibility();
   }
 
+  toggleTargetMsVisibility(targetName: string): void {
+    this.targetVisibility[targetName] = !this.targetVisibility[targetName];
 
+    if (this.targetVisibility[targetName]) {
+      this.map.addLayer(this.targetGroups[targetName]);
+    } else {
+      this.map.removeLayer(this.targetGroups[targetName]);
+    }
 
-
-
+    this.updateFilteredMs1Visibility();
+  }
 
 }

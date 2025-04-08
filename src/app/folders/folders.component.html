@@ -3,141 +3,188 @@
 </div>
 
 <div class="container">
-    <div class="container-flight">
-        <div class="section-flight">
-            <h3>
-                <i class="fa-solid fa-plane-departure"></i>
-                Decollo:
-            </h3>
-            @for (timestamp of takeoffTimestamps; track $index) {
-            <p>{{ timestamp }}</p>
-            }
-            @if (takeoffTimestamps.length === 0) {
-            <p>Nessun decollo rilevato.</p>
-            }
-        </div>
 
-        <!-- Sezione Landing -->
-        <div class="section-flight">
-            <h3>
-                <i class="fa-solid fa-plane-arrival"></i>
-                Atterraggio:
-            </h3>
-            @for (timestamp of landingTimestamps; track $index) {
-            <p>{{ timestamp }}</p>
-            }
-            @if (landingTimestamps.length === 0) {
-            <p>Nessun atterraggio rilevato.</p>
-            }
-        </div>
-
-        @if (totalDurationInSeconds > 0) {
-        <div class="section-flight">
-            <h3>
-                <i class="fa-solid fa-plane-up"></i>
-                Durata volo:
-            </h3>
-            <p class="p-flight">{{convertSecondsToHMS(totalDurationInSeconds) }}</p>
-        </div>
-        }
-
-        @if (totalDistance) {
-        <div class="section-flight">
-            <h3>
-                <i class="fa-solid fa-earth-europe"></i>
-                Lunghezza volo:
-            </h3>
-            <p>{{ totalDistance | number: '1.0-2' }} km</p>
-        </div>
-        }
-
-        <!-- Sezione dettagli target - versione più sicura -->
-        @for (target of uniqueTargets || []; track $index) {
-        <div style="margin-top: 2rem;">
-            <p><strong>Target: {{ target?.targetname }}</strong></p>
-            <ul>
-                <li>Lunghezza Target: {{ target?.totalDistance | number:'1.2-2' }} km</li>
-                <li>Tempo di volo: {{ formatFlightTime(target?.flightTime) }}</li>
-                <li>Leg effettuati: {{ (inCountPerTarget[target?.targetId] || 0) }}</li>
-            </ul>
-        </div>
-        }
-    </div>
-
-    <div class="vertical-line1"></div>
-
-    <div class="section-trolley">
-        <h3 class="trolley-name">Trolleys: {{ trolleysName }}</h3>
-        @if (trolleysFolders.length > 1) {
-        <div class="sensor">
-            @for (folder of trolleysFolders; let i = $index; track $index) {
-            @if (i < trolleysFolders.length - 1) { <p>
-                <i class="fa-solid fa-camera"></i>
-                {{ folder }}
-                </p>
+    <!-- CARD VOLO -->
+    <mat-card appearance="outlined">
+        <mat-card-content>
+            <h2 class="title2">Info Volo</h2>
+            <div class="section-flight">
+                <h3>
+                    <i class="fa-solid fa-plane-departure"></i>
+                    Decollo:
+                </h3>
+                @for (timestamp of takeoffTimestamps; track $index) {
+                <p>{{ timestamp }}</p>
                 }
-                @if (i < trolleysFolders.length - 2) { <hr class="vertical-line2">
-                    }
-                    }
-        </div>
-        }
-
-        <div class="ilx">
-            @if (me1Data && me1Data.length > 0) {
-            <p>Totale Trigger: {{ me1Data.length }}</p>
-            }
-
-            @if (ms1Data.length > 0) {
-            <p>Totale Strobe: {{ ms1Data.length }}</p>
-            }
-
-            <p>Totale immagini: {{ imageCount }}</p>
-        </div>
-    </div>
-
-    <div class="vertical-line"></div>
-
-    <div class="map-container">
-        <div class="map">
-            <div id="flightMap"></div>
-        </div>
-
-        <div>
-            <div class="flight">
-                <label>
-                    <input type="checkbox" [checked]="showFlightPath" (change)="toggleFlightPathVisibility()">
-                    Mostra Tracciato di Volo
-                </label>
+                @if (takeoffTimestamps.length === 0) {
+                <p>Nessun decollo rilevato.</p>
+                }
             </div>
 
-            <h4 class="targets">Targets:</h4>
-            @for (target of uniqueTargets; track $index) {
-            <label>
-                <input type="checkbox" [checked]="target.visible" (change)="toggleTargetVisibility(target.targetname)">
-                {{ target.targetname }}
-            </label>
+            <!-- Sezione Landing -->
+            <div class="section-flight">
+                <h3>
+                    <i class="fa-solid fa-plane-arrival"></i>
+                    Atterraggio:
+                </h3>
+                @for (timestamp of landingTimestamps; track $index) {
+                <p>{{ timestamp }}</p>
+                }
+                @if (landingTimestamps.length === 0) {
+                <p>Nessun atterraggio rilevato.</p>
+                }
+            </div>
+
+            @if (totalDurationInSeconds > 0) {
+            <div class="section-flight">
+                <h3>
+                    <i class="fa-solid fa-plane-up"></i>
+                    Durata volo:
+                </h3>
+                <p class="p-flight">{{ convertSecondsToHMS(totalDurationInSeconds) }}</p>
+            </div>
             }
 
-            @if (filteredMs1Points.length > 0) {
-            <h3>Punti strobe</h3>
-            @for (targetId of getTargetIds(); track $index) {
-            <label>
-                <input type="checkbox" [checked]="targetVisibility[targetId]"
-                    (change)="toggleTargetMsVisibility(targetId)">
-                Target {{targetId}} ({{countPointsForTarget(targetId)}} strobe)
-            </label>
+            @if (totalDistance) {
+            <div class="section-flight">
+                <h3>
+                    <i class="fa-solid fa-earth-europe"></i>
+                    Lunghezza volo:
+                </h3>
+                <p>{{ totalDistance | number: '1.0-2' }} km</p>
+            </div>
             }
-            }
+        </mat-card-content>
+    </mat-card>
 
+    <!-- CARD TARGET -->
+    <mat-card appearance="outlined">
+        <mat-card-content>
+            <h2 class="title2">Info Target</h2>
             <div>
-                <label>
-                    <input type="checkbox" [(ngModel)]="showTasks" (change)="toggleTasksVisibility()" />
-                    Mostra i Leg sulla mappa
-                </label>
+                @for (target of uniqueTargets || []; track $index) {
+                <div>
+                    <p><strong>Target: {{ target?.targetname }}</strong></p>
+                    <ul>
+                        <li>
+                            <span>Lunghezza Target:</span>
+                            {{ target?.totalDistance | number:'1.2-2' }} km
+                        </li>
+                        <li>
+                            <span>Tempo di volo:</span>
+                            {{ formatFlightTime(target?.flightTime) }}
+                        </li>
+                        <li>
+                            <span class="detail-label">Leg effettuati:</span>
+                            {{ (inCountPerTarget[target?.targetId] || 0) }}
+                        </li>
+                        <li *ngIf="getPointCountForTarget(target.targetname) as pointCount">
+                            <span class="detail-label">Leg Pianificati </span>
+                            {{ pointCount }}
+                        </li>
+                    </ul>
+                </div>
+                }
             </div>
+        </mat-card-content>
+    </mat-card>
 
+    <!-- CARD TROLLEYS -->
+    <mat-card appearance="outlined">
+        <mat-card-content>
+            <h2 class="title2">Info Trolley</h2>
+            <div class="section-trolley">
+                <h3 class="trolley-name">Trolleys: {{ trolleysName }}</h3>
+                @if (trolleysFolders.length > 1) {
+                <div class="sensor">
+                    @for (folder of trolleysFolders; let i = $index; track $index) {
+                    @if (i < trolleysFolders.length - 1) { <p>
+                        <i class="fa-solid fa-camera"></i>
+                        {{ folder }}
+                        </p>
+                        }
+                        @if (i < trolleysFolders.length - 2) { <hr class="vertical-line2">
+                            }
+                            }
+                </div>
+                }
 
-        </div>
-    </div>
+                <div class="ilx">
+                    @if (me1Data && me1Data.length > 0) {
+                    <p>Totale Trigger: {{ me1Data.length }}</p>
+                    }
+
+                    @if (ms1Data.length > 0) {
+                    <p>Totale Strobe: {{ ms1Data.length }}</p>
+                    }
+
+                    <p>Totale immagini: {{ imageCount }}</p>
+                </div>
+            </div>
+        </mat-card-content>
+    </mat-card>
 
 </div>
+
+<!-- CARD MAPPA -->
+<mat-card appearance="outlined" class="card-map">
+    <mat-card-content>
+        <div class="map-container">
+            <div class="map">
+                <div id="flightMap"></div>
+            </div>
+
+            <mat-card appearance="outlined" class="card-checkbox">
+                <mat-card-content>
+                    <div class="flight">
+                        <label>
+                            <input type="checkbox" [checked]="showFlightPath" (change)="toggleFlightPathVisibility()">
+                            Mostra Tracciato di Volo
+                        </label>
+                    </div>
+
+                    <div class="target-controls-container">
+                        @for (target of uniqueTargets; track $index) {
+                        <div class="target-control-group">
+                            <h4 class="target-name">{{ target.targetname }}</h4>
+
+                            <div class="checkbox-container">
+                                <!-- Checkbox per la visibilità del target -->
+                                <label class="target-checkbox">
+                                    <input type="checkbox" [checked]="target.visible"
+                                        (change)="toggleTargetVisibility(target.targetname)">
+                                    Targets Visibility
+                                </label>
+
+                                <!-- Checkbox per i Task Legs, se disponibili -->
+                                @if (hasTaskLegs(target.targetname)) {
+                                <label class="target-checkbox">
+                                    <input type="checkbox" [checked]="taskLegsVisibility[target.targetname]"
+                                        (change)="toggleTasksVisibility(target.targetname)">
+                                    Task Legs
+                                </label>
+                                }
+
+                                <!-- Se ci sono punti strobe associati a questo target -->
+                                @if (filteredMs1Points.length > 0) {
+                                <div class="strobe-points-container">
+                                    @for (targetName of getTargetNames(); track $index) {
+                                    @if (target.targetname === targetName) {
+                                    <label>
+                                        <input type="checkbox" [checked]="strobeVisibility[targetName]"
+                                            (change)="toggleTargetMsVisibility(targetName)">
+                                        Strobe {{ countPointsForTarget(targetName) }}
+                                    </label>
+                                    }
+                                    }
+                                </div>
+                                }
+                            </div>
+                        </div>
+                        }
+                    </div>
+                </mat-card-content>
+            </mat-card>
+        </div>
+    </mat-card-content>
+</mat-card>
