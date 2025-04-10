@@ -111,14 +111,14 @@
 
                 <div class="ilx">
                     @if (me1Data && me1Data.length > 0) {
-                    <p>Totale Trigger: {{ me1Data.length }}</p>
+                    <p>Totale Trigger: <span [ngClass]="getClass('trigger')">{{ me1Data.length }}</span></p>
                     }
 
                     @if (ms1Data.length > 0) {
-                    <p>Totale Strobe: {{ ms1Data.length }}</p>
+                    <p>Totale Strobe: <span [ngClass]="getClass('strobe')">{{ ms1Data.length }}</span></p>
                     }
 
-                    <p>Totale immagini: {{ imageCount }}</p>
+                    <p>Totale immagini: <span [ngClass]="getClass('image')">{{ imageCount }}</span></p>
                 </div>
             </div>
         </mat-card-content>

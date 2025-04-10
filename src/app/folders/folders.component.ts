@@ -7,6 +7,8 @@ import { LeafletModule } from '@bluehalo/ngx-leaflet';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
+import { MatExpansionModule } from '@angular/material/expansion';
+
 
 interface FilteredMs1Data {
   [key: string]: {
@@ -53,12 +55,11 @@ interface Task {
 @Component({
   selector: 'app-folders',
   standalone: true,
-  imports: [CommonModule, LeafletModule, FormsModule, MatCardModule],
+  imports: [CommonModule, LeafletModule, FormsModule, MatCardModule, MatExpansionModule],
   templateUrl: './folders.component.html',
   styleUrls: ['./folders.component.css']
 })
 export class FoldersComponent implements OnInit {
-
   takeoffTimestamps: string[] = [];
   landingTimestamps: string[] = [];
   flightPath: { lat: number, lon: number, alt: number }[] = [];
@@ -112,6 +113,7 @@ export class FoldersComponent implements OnInit {
   targetNamesAndIds: { targetname: string; targetId: string }[] = [];
   taskLegsVisibility: { [key: string]: boolean } = {};
   strobeVisibility: { [key: string]: boolean } = {};
+  isMobile = false;
 
 
 
@@ -1021,6 +1023,33 @@ export class FoldersComponent implements OnInit {
     console.log(`ℹ️ ${name} (${targetName}) ha ${count} punti filtrati`);
 
     return count;
+  }
+
+  getClass(type: 'trigger' | 'strobe' | 'image'): string {
+    const trigger = this.me1Data?.length ?? 0;
+    const strobe = this.ms1Data?.length ?? 0;
+    const images = this.imageCount;
+
+    const values = [trigger, strobe, images];
+    const counts = { trigger, strobe, images };
+
+    // Conta le occorrenze di ciascun valore
+    const occurrences = values.reduce((acc: Record<number, number>, val) => {
+      acc[val] = (acc[val] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Trova i valori che compaiono una sola volta (cioè i diversi)
+    const differentValues = Object.keys(occurrences)
+      .filter(k => occurrences[+k] === 1)
+      .map(k => +k);
+
+    // Se il valore attuale è uno di quelli unici → rosso
+    if (type === 'trigger' && differentValues.includes(trigger)) return 'red-text';
+    if (type === 'strobe' && differentValues.includes(strobe)) return 'red-text';
+    if (type === 'image' && differentValues.includes(images)) return 'red-text';
+
+    return '';
   }
 
 
