@@ -1,5 +1,5 @@
 <div class="title">
-    <h2>{{ folderPath }}</h2>
+    <h2>{{ stateService.folderPath }}</h2>
 </div>
 
 <div class="container">
@@ -13,10 +13,10 @@
                     <i class="fa-solid fa-plane-departure"></i>
                     Decollo:
                 </h3>
-                @for (timestamp of takeoffTimestamps; track $index) {
+                @for (timestamp of stateService.takeoffTimestamps; track $index) {
                 <p>{{ timestamp }}</p>
                 }
-                @if (takeoffTimestamps.length === 0) {
+                @if (stateService.takeoffTimestamps.length === 0) {
                 <p>Nessun decollo rilevato.</p>
                 }
             </div>
@@ -27,31 +27,31 @@
                     <i class="fa-solid fa-plane-arrival"></i>
                     Atterraggio:
                 </h3>
-                @for (timestamp of landingTimestamps; track $index) {
+                @for (timestamp of stateService.landingTimestamps; track $index) {
                 <p>{{ timestamp }}</p>
                 }
-                @if (landingTimestamps.length === 0) {
+                @if (stateService.landingTimestamps.length === 0) {
                 <p>Nessun atterraggio rilevato.</p>
                 }
             </div>
 
-            @if (totalDurationInSeconds > 0) {
+            @if (stateService.totalDurationInSeconds > 0) {
             <div class="section-flight">
                 <h3>
                     <i class="fa-solid fa-plane-up"></i>
                     Durata volo:
                 </h3>
-                <p class="p-flight">{{ convertSecondsToHMS(totalDurationInSeconds) }}</p>
+                <p class="p-flight">{{ convertSecondsToHMS(stateService.totalDurationInSeconds) }}</p>
             </div>
             }
 
-            @if (totalDistance) {
+            @if (stateService.totalDistance) {
             <div class="section-flight">
                 <h3>
                     <i class="fa-solid fa-earth-europe"></i>
                     Lunghezza volo:
                 </h3>
-                <p>{{ totalDistance | number: '1.0-2' }} km</p>
+                <p>{{ stateService.totalDistance | number: '1.0-2' }} km</p>
             </div>
             }
         </mat-card-content>
@@ -62,7 +62,7 @@
         <mat-card-content>
             <h2 class="title2">Info Target</h2>
             <div>
-                @for (target of uniqueTargets || []; track $index) {
+                @for (target of stateService.uniqueTargets || []; track $index) {
                 <div>
                     <p><strong>Target: {{ target?.targetname }}</strong></p>
                     <ul>
@@ -76,7 +76,7 @@
                         </li>
                         <li>
                             <span class="detail-label">Leg effettuati:</span>
-                            {{ (inCountPerTarget[target?.targetId] || 0) }}
+                            {{ (stateService.inCountPerTarget[target?.targetId] || 0) }}
                         </li>
                         <li *ngIf="getPointCountForTarget(target.targetname) as pointCount">
                             <span class="detail-label">Leg Pianificati </span>
@@ -94,31 +94,32 @@
         <mat-card-content>
             <h2 class="title2">Info Trolley</h2>
             <div class="section-trolley">
-                <h3 class="trolley-name">Trolleys: {{ trolleysName }}</h3>
-                @if (trolleysFolders.length > 1) {
+                <h3 class="trolley-name">Trolleys: {{ stateService.trolleysName }}</h3>
+                @if (stateService.trolleysFolders.length > 1) {
                 <div class="sensor">
-                    @for (folder of trolleysFolders; let i = $index; track $index) {
-                    @if (i < trolleysFolders.length - 1) { <p>
+                    @for (folder of stateService.trolleysFolders; let i = $index; track $index) {
+                    @if (i < stateService.trolleysFolders.length - 1) { <p>
                         <i class="fa-solid fa-camera"></i>
                         {{ folder }}
                         </p>
                         }
-                        @if (i < trolleysFolders.length - 2) { <hr class="vertical-line2">
+                        @if (i < stateService.trolleysFolders.length - 2) { <hr class="vertical-line2">
                             }
                             }
                 </div>
                 }
 
                 <div class="ilx">
-                    @if (me1Data && me1Data.length > 0) {
-                    <p>Totale Trigger: <span [ngClass]="getClass('trigger')">{{ me1Data.length }}</span></p>
+                    @if (stateService.me1Data && stateService.me1Data.length > 0) {
+                    <p>Totale Trigger: <span [ngClass]="getClass('trigger')">{{ stateService.me1Data.length }}</span>
+                    </p>
                     }
 
-                    @if (ms1Data.length > 0) {
-                    <p>Totale Strobe: <span [ngClass]="getClass('strobe')">{{ ms1Data.length }}</span></p>
+                    @if (stateService.ms1Data.length > 0) {
+                    <p>Totale Strobe: <span [ngClass]="getClass('strobe')">{{ stateService.ms1Data.length }}</span></p>
                     }
 
-                    <p>Totale immagini: <span [ngClass]="getClass('image')">{{ imageCount }}</span></p>
+                    <p>Totale immagini: <span [ngClass]="getClass('image')">{{ stateService.imageCount }}</span></p>
                 </div>
             </div>
         </mat-card-content>
@@ -138,13 +139,14 @@
                 <mat-card-content>
                     <div class="flight">
                         <label>
-                            <input type="checkbox" [checked]="showFlightPath" (change)="toggleFlightPathVisibility()">
+                            <input type="checkbox" [checked]="stateService.showFlightPath"
+                                (change)="toggleFlightPathVisibility()">
                             Mostra Tracciato di Volo
                         </label>
                     </div>
 
                     <div class="target-controls-container">
-                        @for (target of uniqueTargets; track $index) {
+                        @for (target of stateService.uniqueTargets; track $index) {
                         <div class="target-control-group">
                             <h4 class="target-name">{{ target.targetname }}</h4>
 
@@ -159,19 +161,20 @@
                                 <!-- Checkbox per i Task Legs, se disponibili -->
                                 @if (hasTaskLegs(target.targetname)) {
                                 <label class="target-checkbox">
-                                    <input type="checkbox" [checked]="taskLegsVisibility[target.targetname]"
+                                    <input type="checkbox"
+                                        [checked]="stateService.taskLegsVisibility[target.targetname]"
                                         (change)="toggleTasksVisibility(target.targetname)">
                                     Task Legs
                                 </label>
                                 }
 
                                 <!-- Se ci sono punti strobe associati a questo target -->
-                                @if (filteredMs1Points.length > 0) {
+                                @if (stateService.filteredMs1Points.length > 0) {
                                 <div class="strobe-points-container">
                                     @for (targetName of getTargetNames(); track $index) {
                                     @if (target.targetname === targetName) {
                                     <label>
-                                        <input type="checkbox" [checked]="strobeVisibility[targetName]"
+                                        <input type="checkbox" [checked]="stateService.strobeVisibility[targetName]"
                                             (change)="toggleTargetMsVisibility(targetName)">
                                         Strobe {{ countPointsForTarget(targetName) }}
                                     </label>
